@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>PTI Inspections — Demo</title>
+<link rel="stylesheet" href="css/styles.css" />
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#2a2f50" />
+<link rel="icon" href="assets/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="PTI" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ LOGIN ============ -->
+  <section class="screen" id="screen-login" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">PTI</div>
+        <h1>PTI Inspections</h1>
+        <p class="sub">Fleet walkaround &amp; inspection app</p>
+      </div>
+
+      <div class="card">
+        <p class="demo-note">Demo build — accounts below are stored in this browser only. Production swaps this for real Supabase auth, same shape: sign up once, pick your role, never pick it again.<br><br>Quick test logins (Log In tab): <strong>mike@demo.pti</strong> / <strong>demo123</strong> (driver) or <strong>dispatch@demo.pti</strong> / <strong>demo123</strong> (fleet manager).</p>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="signup" type="button">Create Account</button>
+          <button class="auth-tab" data-tab="login" type="button">Log In</button>
+        </div>
+
+        <!-- Sign up -->
+        <div id="tab-signup">
+          <label class="field-label">Full name</label>
+          <input class="field" type="text" id="signup-name" placeholder="e.g. Mike Reyes" autocomplete="name" />
+          <label class="field-label">Email</label>
+          <input class="field" type="email" id="signup-email" placeholder="you@company.com" autocomplete="email" />
+          <label class="field-label">Phone <span class="field-optional">(optional)</span></label>
+          <input class="field" type="tel" id="signup-phone" placeholder="(555) 555-0100" autocomplete="tel" />
+          <label class="field-label">Password</label>
+          <input class="field" type="password" id="signup-password" placeholder="Choose a password" autocomplete="new-password" />
+
+          <label class="field-label">I am a…</label>
+          <div class="role-toggle">
+            <button class="role-btn active" data-role="driver" type="button">Driver</button>
+            <button class="role-btn" data-role="manager" type="button">Fleet Manager</button>
+          </div>
+
+          <div id="signup-fleet-code-field">
+            <label class="field-label">Fleet access code</label>
+            <input class="field" type="text" id="signup-fleet-code" placeholder="Ask your fleet manager for this" autocomplete="off" />
+          </div>
+          <p class="field-hint" id="signup-fleet-code-hint" style="display:none;">A unique fleet code is created for you automatically — you'll give this to your drivers so their submissions link to your dashboard.</p>
+
+          <div class="field-error" id="signup-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-signup">Create Account</button>
+        </div>
+
+        <!-- Log in -->
+        <div id="tab-login" style="display:none;">
+          <label class="field-label">Email</label>
+          <input class="field" type="email" id="login-email" placeholder="you@company.com" autocomplete="email" />
+          <label class="field-label">Password</label>
+          <input class="field" type="password" id="login-password" placeholder="Your password" autocomplete="current-password" />
+          <div class="field-error" id="login-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-login">Log In</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DRIVER HOME ============ -->
+  <section class="screen" id="screen-home" data-screen>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <div>
+          <div class="hello">Hi, <span id="home-driver-name">Driver</span></div>
+          <div class="hello-sub">Ready for your next check?</div>
+        </div>
+        <button class="icon-btn" id="btn-logout" title="Switch user">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        </button>
+      </header>
+
+      <div class="mode-grid">
+        <button class="mode-card" data-type="PTI">
+          <div class="mode-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4z"/><path d="M8.5 13l2.3 2.3L15.5 10.5"/></svg>
+          </div>
+          <div class="mode-title">PTI</div>
+          <div class="mode-sub">Pre-trip inspection · 4:00 min</div>
+        </button>
+        <button class="mode-card" data-type="HOOK">
+          <div class="mode-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div class="mode-title">HOOK</div>
+          <div class="mode-sub">Hook up trailer · 1:00 min</div>
+        </button>
+        <button class="mode-card" data-type="DROP">
+          <div class="mode-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div class="mode-title">DROP</div>
+          <div class="mode-sub">Drop trailer · 1:00 min</div>
+        </button>
+      </div>
+
+      <button class="btn btn-secondary btn-block" id="btn-history">View My History</button>
+      <button class="btn btn-link btn-block" id="btn-show-demo-qrs">Show demo QR codes to scan →</button>
+    </div>
+  </section>
+
+  <!-- ============ QR SCAN ============ -->
+  <section class="screen" id="screen-scan" data-screen>
+    <div class="phone-shell dark">
+      <header class="top-bar dark">
+        <button class="icon-btn" data-back="screen-home">←</button>
+        <div class="hello" id="scan-title">Scan unit QR code</div>
+        <div style="width:32px"></div>
+      </header>
+
+      <div class="scan-frame">
+        <video id="scan-video" playsinline muted></video>
+        <div class="scan-reticle"></div>
+        <div class="scan-hint">Point camera at the QR code on the truck / trailer</div>
+      </div>
+
+      <div class="card manual-entry">
+        <label class="field-label">Or enter unit number manually</label>
+        <div class="manual-row">
+          <input class="field" type="text" id="manual-unit" placeholder="e.g. TRK-104" />
+          <button class="btn btn-primary" id="btn-manual-submit">Use</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RECORDING ============ -->
+  <section class="screen" id="screen-record" data-screen>
+    <div class="record-stage">
+      <video id="record-video" playsinline muted autoplay></video>
+      <canvas id="record-canvas" style="display:none;"></canvas>
+      <div id="marker-layer" class="marker-layer"></div>
+
+      <div class="record-topbar">
+        <button class="icon-btn light" data-back="screen-home" id="btn-record-close">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="record-badge" id="record-type-badge">PTI</div>
+        <div class="record-unit-badge" id="record-unit-badge">TRK-104</div>
+      </div>
+
+      <div class="record-timer-wrap">
+        <div class="record-timer" id="record-timer">0:00</div>
+        <div class="record-min" id="record-min-req">min 4:00</div>
+        <div class="record-location" id="record-location">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="record-location-text">Locating…</span>
+        </div>
+      </div>
+
+      <div class="tap-hint" id="tap-hint">Tap anywhere on screen to flag a defect (optional)</div>
+      <div class="camera-warning" id="camera-warning" style="display:none;">Camera/microphone permission is required to record. Check your browser/device settings and try again.</div>
+
+      <div class="record-bottom">
+        <div class="defect-count" id="defect-count-wrap" style="visibility:hidden;">
+          <span id="defect-count">0</span> defect photo(s) flagged
+        </div>
+
+        <div class="record-controls" id="controls-live">
+          <button class="record-btn" id="btn-record-toggle"><span class="record-dot"></span></button>
+        </div>
+
+        <div class="record-controls-stopped" id="controls-stopped" style="display:none;">
+          <div class="min-warning" id="min-warning" style="display:none;">Recording is shorter than the required minimum. Please retake.</div>
+          <button class="btn btn-outline-light btn-block" id="btn-retake">Delete &amp; Retake</button>
+          <button class="btn btn-primary btn-block" id="btn-save-upload">Save &amp; Upload</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ UPLOAD TOAST (overlay, not a screen) ============ -->
+  <div class="toast" id="upload-toast">
+    <div class="toast-spinner"></div>
+    <div>
+      <div class="toast-title">Uploading…</div>
+      <div class="toast-sub">Safe to close the app — it'll keep going in the background.</div>
+    </div>
+  </div>
+
+  <!-- ============ HISTORY (driver) ============ -->
+  <section class="screen" id="screen-history" data-screen>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <button class="icon-btn" data-back="screen-home">←</button>
+        <div class="hello">My History</div>
+        <div style="width:32px"></div>
+      </header>
+      <div id="history-list" class="entry-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ DEMO QR CODES ============ -->
+  <section class="screen" id="screen-demo-qrs" data-screen>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <button class="icon-btn" data-back="screen-home">←</button>
+        <div class="hello">Demo unit QR codes</div>
+        <div style="width:32px"></div>
+      </header>
+      <p class="demo-note">In production these get printed as a sticker on each truck &amp; trailer. For this demo, point your camera at one of these on another screen (or a printout) during the scan step. If the camera won't pick it up, the manual entry field on the scan screen always works.</p>
+      <div id="qr-grid" class="qr-grid"></div>
+      <div class="qr-fallback-note" id="qr-fallback-note" style="display:none;">QR image rendering isn't available in this browser — use manual entry on the scan screen with these unit numbers: <strong id="qr-fallback-units"></strong></div>
+    </div>
+  </section>
+
+  <!-- ============ FLEET MANAGER DASHBOARD ============ -->
+  <section class="screen" id="screen-dashboard" data-screen>
+    <div class="dashboard">
+      <header class="dash-header">
+        <div>
+          <div class="dash-title">Fleet Manager Dashboard</div>
+          <div class="dash-sub">All driver inspections, synced in real time</div>
+        </div>
+        <div class="dash-header-right">
+          <div class="fleet-code-chip" id="fleet-code-chip" title="Give this code to your drivers so their accounts link to your fleet">
+            Fleet code: <strong id="fleet-code-value">—</strong>
+          </div>
+          <button class="icon-btn" id="btn-logout-dash" title="Switch user">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="dash-tabs">
+        <button class="dash-tab active" data-panel="inspections" type="button">Inspections</button>
+        <button class="dash-tab" data-panel="units" type="button">Trucks &amp; Trailers</button>
+      </div>
+
+      <!-- Inspections panel -->
+      <div class="dash-panel active" id="panel-inspections">
+        <div class="dash-stats" id="dash-stats"></div>
+
+        <div class="dash-filters">
+          <div class="filter-group" id="filter-time">
+            <button class="chip active" data-range="today">Today</button>
+            <button class="chip" data-range="yesterday">Yesterday</button>
+            <button class="chip" data-range="7d">Last 7 Days</button>
+            <button class="chip" data-range="all">All Time</button>
+          </div>
+          <div class="combo" id="combo-unit">
+            <input type="text" class="field field-inline combo-input" id="filter-unit-input" placeholder="All Trucks &amp; Trailers" autocomplete="off" />
+            <div class="combo-list" id="filter-unit-list"></div>
+          </div>
+          <div class="combo" id="combo-driver">
+            <input type="text" class="field field-inline combo-input" id="filter-driver-input" placeholder="All Drivers" autocomplete="off" />
+            <div class="combo-list" id="filter-driver-list"></div>
+          </div>
+          <select class="field field-inline" id="filter-type">
+            <option value="">All Types</option>
+            <option value="PTI">PTI</option>
+            <option value="HOOK">HOOK</option>
+            <option value="DROP">DROP</option>
+          </select>
+        </div>
+
+        <div id="dash-list" class="entry-list dash-list"></div>
+      </div>
+
+      <!-- Fleet Units panel -->
+      <div class="dash-panel" id="panel-units">
+        <div class="card unit-add-card">
+          <label class="field-label">Unit number</label>
+          <input class="field" type="text" id="unit-number-input" placeholder="e.g. TRK-612" autocomplete="off" />
+          <label class="field-label">Type</label>
+          <div class="role-toggle">
+            <button class="role-btn kind-btn active" data-kind="truck" type="button">Truck</button>
+            <button class="role-btn kind-btn" data-kind="trailer" type="button">Trailer</button>
+          </div>
+          <div class="field-error" id="unit-add-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-add-unit">Add to Fleet</button>
+        </div>
+        <div id="units-list" class="entry-list"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="js/qrcode.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch((err) => console.warn('SW registration failed', err));
+    });
+  }
+</script>
+</body>
+</html>

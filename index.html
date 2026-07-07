@@ -31,8 +31,8 @@
         <p class="demo-note">Real accounts, backed by Supabase. Fleet managers get a fleet code on sign-up — share it with your drivers so their submissions link to your dashboard.</p>
 
         <div class="auth-tabs">
-          <button class="auth-tab active" data-tab="signup" type="button">Create Account</button>
           <button class="auth-tab" data-tab="login" type="button">Log In</button>
+          <button class="auth-tab active" data-tab="signup" type="button">Create Account</button>
         </div>
 
         <!-- Sign up -->
@@ -163,7 +163,6 @@
       </div>
 
       <button class="btn btn-secondary btn-block" id="btn-history">View My History</button>
-      <button class="btn btn-link btn-block" id="btn-show-demo-qrs">Show demo QR codes to scan →</button>
     </div>
   </section>
 
@@ -255,20 +254,6 @@
         <div style="width:32px"></div>
       </header>
       <div id="history-list" class="entry-list"></div>
-    </div>
-  </section>
-
-  <!-- ============ DEMO QR CODES ============ -->
-  <section class="screen" id="screen-demo-qrs" data-screen>
-    <div class="phone-shell">
-      <header class="top-bar">
-        <button class="icon-btn" data-back="screen-home">←</button>
-        <div class="hello">Demo unit QR codes</div>
-        <div style="width:32px"></div>
-      </header>
-      <p class="demo-note">In production these get printed as a sticker on each truck &amp; trailer. For this demo, point your camera at one of these on another screen (or a printout) during the scan step. If the camera won't pick it up, the manual entry field on the scan screen always works.</p>
-      <div id="qr-grid" class="qr-grid"></div>
-      <div class="qr-fallback-note" id="qr-fallback-note" style="display:none;">QR image rendering isn't available in this browser — use manual entry on the scan screen with these unit numbers: <strong id="qr-fallback-units"></strong></div>
     </div>
   </section>
 

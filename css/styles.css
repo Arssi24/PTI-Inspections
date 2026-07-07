@@ -9,9 +9,8 @@
   --steel: #5b7bb8;
   --red: #c0392b;
   --green: #1e9e5a;
-  --yellow: #eab308;
-  --yellow-icon: #b58900;
-  --amber: #d6901e;
+  --cyan: #0891b2;
+  --purple-drop: #8b3fd6;
   --bg: #f4f6fa;
   --card: #ffffff;
   --text: #101828;
@@ -144,15 +143,23 @@ html, body {
 .mode-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 4px; }
 .mode-card {
   display: flex; align-items: center; gap: 14px;
-  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 18px; text-align: left; cursor: pointer;
+  border: none; border-radius: var(--radius);
+  padding: 18px; text-align: left; cursor: pointer; color: #fff;
+  box-shadow: 0 6px 16px rgba(16,24,40,0.14);
+  transition: transform 0.1s ease;
 }
-.mode-card:active { background: var(--primary-light); }
-.mode-icon { color: var(--green); }
-.mode-card[data-type="HOOK"] .mode-icon { color: var(--yellow-icon); }
-.mode-card[data-type="DROP"] .mode-icon { color: var(--red); }
-.mode-title { font-size: 17px; font-weight: 800; }
-.mode-sub { font-size: 12.5px; color: var(--text-mute); }
+.mode-card:active { filter: brightness(0.94); transform: scale(0.99); }
+.mode-card[data-type="PTI"] { background: linear-gradient(135deg, #2fcb82, #159457); }
+.mode-card[data-type="HOOK"] { background: linear-gradient(135deg, #4dd8ec, #0891b2); }
+.mode-card[data-type="DROP"] { background: linear-gradient(135deg, #b57aef, #8b3fd6); }
+.mode-icon {
+  width: 44px; height: 44px; flex-shrink: 0; color: #fff;
+  background: rgba(255,255,255,0.22); border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.mode-icon .icon { width: 23px; height: 23px; }
+.mode-title { font-size: 17px; font-weight: 800; color: #fff; }
+.mode-sub { font-size: 12.5px; color: rgba(255,255,255,0.85); }
 
 /* ---------- QR scan ---------- */
 .scan-frame {
@@ -245,12 +252,13 @@ html, body {
 
 /* ---------- toast ---------- */
 .toast {
-  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 120%);
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 0);
   background: #111826; color: #fff; padding: 14px 18px; border-radius: 14px;
   display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-  z-index: 999; transition: transform 0.3s ease; max-width: 90vw;
+  z-index: 999; transition: opacity 0.3s ease, visibility 0.3s ease; max-width: 90vw;
+  opacity: 0; visibility: hidden;
 }
-.toast.show { transform: translate(-50%, 0); }
+.toast.show { opacity: 1; visibility: visible; }
 .toast-spinner {
   width: 20px; height: 20px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.25);
   border-top-color: #fff; animation: spin 0.8s linear infinite; flex-shrink: 0;
@@ -270,8 +278,8 @@ html, body {
   font-size: 11px; font-weight: 800; letter-spacing: 0.5px; padding: 3px 9px; border-radius: 999px; color: #fff;
 }
 .entry-type.PTI { background: var(--green); }
-.entry-type.HOOK { background: var(--yellow); color: var(--navy-darker); }
-.entry-type.DROP { background: var(--red); }
+.entry-type.HOOK { background: var(--cyan); }
+.entry-type.DROP { background: var(--purple-drop); }
 .entry-unit { font-weight: 700; font-size: 14.5px; }
 .entry-meta { font-size: 12.5px; color: var(--text-mute); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
 .entry-driver { font-size: 12.5px; color: var(--navy); font-weight: 600; }
@@ -283,14 +291,6 @@ html, body {
 .entry-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .entry-photos img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 2px solid var(--red); }
 .empty-state { text-align: center; color: var(--text-mute); padding: 60px 20px; font-size: 14px; }
-
-/* ---------- demo qr grid ---------- */
-.qr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.qr-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 12px; text-align: center; }
-.qr-card canvas { width: 100%; height: auto; }
-.qr-card .qr-label { font-weight: 700; margin-top: 6px; font-size: 13px; }
-.qr-card > div { display: flex; justify-content: center; }
-.qr-fallback-note { font-size: 13px; color: var(--text-mute); line-height: 1.6; }
 
 /* ---------- fleet manager dashboard (desktop-first) ---------- */
 .dashboard { max-width: 1080px; margin: 0 auto; padding: 28px 28px 60px; }
@@ -372,5 +372,4 @@ html, body {
   .dashboard { padding: 18px 14px 50px; }
   .dash-header { flex-wrap: wrap; }
   .dash-header-right { width: 100%; justify-content: space-between; }
-  .qr-grid { grid-template-columns: 1fr 1fr; }
 }

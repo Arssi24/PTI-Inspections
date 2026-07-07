@@ -171,7 +171,6 @@ async function init() {
   $('#btn-logout').addEventListener('click', logout);
   $('#btn-logout-dash').addEventListener('click', logout);
   $('#btn-history').addEventListener('click', openHistory);
-  $('#btn-show-demo-qrs').addEventListener('click', openDemoQrs);
 
   $$('.mode-card').forEach((card) => {
     card.addEventListener('click', () => startFlow(card.dataset.type));
@@ -860,44 +859,6 @@ async function renderUnitsList() {
   });
 }
 
-/* ---------------- demo QR codes ---------------- */
-
-async function openDemoQrs() {
-  showScreen('screen-demo-qrs');
-  const grid = $('#qr-grid');
-  const fallback = $('#qr-fallback-note');
-  grid.innerHTML = '';
-
-  const units = await sbGetUnits(state.fleetCode);
-
-  if (units.length === 0) {
-    grid.style.display = 'none';
-    fallback.style.display = 'block';
-    $('#qr-fallback-units').textContent = 'None yet — ask your fleet manager to add trucks/trailers.';
-    return;
-  }
-  if (!window.QRCode) {
-    grid.style.display = 'none';
-    fallback.style.display = 'block';
-    $('#qr-fallback-units').textContent = units.map((u) => u.unit).join(', ');
-    return;
-  }
-  grid.style.display = 'grid';
-  fallback.style.display = 'none';
-
-  units.forEach(({ unit }) => {
-    const card = document.createElement('div');
-    card.className = 'qr-card';
-    const qrHolder = document.createElement('div');
-    card.appendChild(qrHolder);
-    const label = document.createElement('div');
-    label.className = 'qr-label';
-    label.textContent = unit;
-    card.appendChild(label);
-    grid.appendChild(card);
-    new QRCode(qrHolder, { text: unit, width: 150, height: 150, correctLevel: QRCode.CorrectLevel.M });
-  });
-}
 
 /* ---------------- fleet manager dashboard ---------------- */
 

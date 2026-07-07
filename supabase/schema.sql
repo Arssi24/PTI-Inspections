@@ -14,6 +14,9 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- Added after the table already existed in some projects — safe to re-run.
+alter table public.profiles add column if not exists assigned_unit text;
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "Users can read own profile" on public.profiles;
@@ -72,6 +75,23 @@ create policy "Managers can read their fleet's driver profiles"
   on public.profiles for select
   using (fleet_code = public.current_fleet_code());
 
+-- Managers can remove a driver from their own fleet's roster (revokes their access —
+-- the driver's login account still exists, it just has no profile/fleet tie anymore).
+-- Scoped to role = 'driver' so this can never be used to remove a manager, including
+-- accidentally removing yourself.
+drop policy if exists "Managers can remove their fleet's drivers" on public.profiles;
+create policy "Managers can remove their fleet's drivers"
+  on public.profiles for delete
+  using (fleet_code = public.current_fleet_code() and role = 'driver');
+
+-- Lets a manager edit a driver's display name and assigned truck/trailer. Same row scope
+-- as the delete policy above (their own fleet's drivers only, never another manager).
+drop policy if exists "Managers can edit their fleet's drivers" on public.profiles;
+create policy "Managers can edit their fleet's drivers"
+  on public.profiles for update
+  using (fleet_code = public.current_fleet_code() and role = 'driver')
+  with check (fleet_code = public.current_fleet_code() and role = 'driver');
+
 
 -- ============ AUTO-CREATE PROFILE (AND FLEET, IF MANAGER) ON SIGNUP ============
 -- Fires inside the same database transaction as the auth.users row itself, so it runs
@@ -80,6 +100,12 @@ create policy "Managers can read their fleet's driver profiles"
 -- though the signing-up client has no session yet (can't pass an auth.uid() RLS check).
 -- name/phone/role/fleet_code are passed from the client via supabase.auth.signUp's
 -- `options.data`, which Postgres receives as new.raw_user_meta_data.
+--
+-- A manager can either create a brand-new fleet (v_fleet_code arrives empty) or join an
+-- existing one as an additional manager (v_fleet_code arrives already set, same as how a
+-- driver joins). Access everywhere else is governed purely by profiles.fleet_code matching
+-- current_fleet_code(), not by fleets.manager_id — so a second manager on the same code
+-- automatically gets full dashboard visibility with no other schema changes needed.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -96,22 +122,28 @@ declare
   v_chars text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 begin
   if v_role = 'manager' then
-    loop
-      v_attempt := v_attempt + 1;
-      v_candidate := 'F';
-      for i in 1..5 loop
-        v_candidate := v_candidate || substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1);
+    if v_fleet_code is not null and v_fleet_code <> '' then
+      if not exists (select 1 from public.fleets where code = v_fleet_code) then
+        raise exception 'Fleet code not found';
+      end if;
+    else
+      loop
+        v_attempt := v_attempt + 1;
+        v_candidate := 'F';
+        for i in 1..5 loop
+          v_candidate := v_candidate || substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1);
+        end loop;
+        begin
+          insert into public.fleets (code, manager_id, manager_name) values (v_candidate, new.id, v_name);
+          v_fleet_code := v_candidate;
+          exit;
+        exception when unique_violation then
+          if v_attempt >= 6 then
+            raise exception 'Could not generate a unique fleet code, try signing up again';
+          end if;
+        end;
       end loop;
-      begin
-        insert into public.fleets (code, manager_id, manager_name) values (v_candidate, new.id, v_name);
-        v_fleet_code := v_candidate;
-        exit;
-      exception when unique_violation then
-        if v_attempt >= 6 then
-          raise exception 'Could not generate a unique fleet code, try signing up again';
-        end if;
-      end;
-    end loop;
+    end if;
   end if;
 
   insert into public.profiles (id, name, email, phone, role, fleet_code)

@@ -47,7 +47,7 @@
           <input class="field" type="password" id="signup-password" placeholder="Choose a password" autocomplete="new-password" />
 
           <label class="field-label">I am a…</label>
-          <div class="role-toggle">
+          <div class="role-toggle" id="signup-role-toggle">
             <button class="role-btn active" data-role="driver" type="button">Driver</button>
             <button class="role-btn" data-role="manager" type="button">Fleet Manager</button>
           </div>
@@ -56,7 +56,19 @@
             <label class="field-label">Fleet access code</label>
             <input class="field" type="text" id="signup-fleet-code" placeholder="Ask your fleet manager for this" autocomplete="off" />
           </div>
-          <p class="field-hint" id="signup-fleet-code-hint" style="display:none;">A unique fleet code is created for you automatically — you'll give this to your drivers so their submissions link to your dashboard.</p>
+
+          <div id="manager-mode-field" style="display:none;">
+            <label class="field-label">Fleet setup</label>
+            <div class="role-toggle">
+              <button class="role-btn manager-mode-btn active" data-mode="create" type="button">Create a code</button>
+              <button class="role-btn manager-mode-btn" data-mode="join" type="button">I already have a code</button>
+            </div>
+            <p class="field-hint" id="manager-create-hint">A unique fleet code is created for you automatically — you'll give this to your drivers, and to any other managers on your team, so everyone links to the same dashboard.</p>
+            <div id="manager-join-code-field" style="display:none;">
+              <label class="field-label">Existing fleet code</label>
+              <input class="field" type="text" id="signup-manager-fleet-code" placeholder="Ask another manager on your team" autocomplete="off" />
+            </div>
+          </div>
 
           <div class="field-error" id="signup-error" style="display:none;"></div>
           <button class="btn btn-primary btn-block" id="btn-signup">Create Account</button>
@@ -329,6 +341,7 @@
 
       <!-- Drivers panel -->
       <div class="dash-panel" id="panel-drivers">
+        <div class="dash-stats" id="drivers-stats"></div>
         <p class="demo-note">Everyone who's signed up with your fleet code, whether or not they've submitted an inspection yet.</p>
         <div id="drivers-list" class="entry-list"></div>
       </div>

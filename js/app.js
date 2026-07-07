@@ -7,6 +7,7 @@ const MIN_SECONDS = { PTI: 4 * 60, HOOK: 60, DROP: 60 };
 const state = {
   role: 'driver',
   signupRole: 'driver',
+  managerSignupMode: 'create',
   userId: null,
   driverName: '',
   driverEmail: '',
@@ -132,13 +133,23 @@ async function init() {
     });
   });
 
-  $$('#tab-signup .role-toggle .role-btn').forEach((btn) => {
+  $$('#signup-role-toggle .role-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      $$('#tab-signup .role-toggle .role-btn').forEach((b) => b.classList.remove('active'));
+      $$('#signup-role-toggle .role-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.signupRole = btn.dataset.role;
       $('#signup-fleet-code-field').style.display = state.signupRole === 'driver' ? 'block' : 'none';
-      $('#signup-fleet-code-hint').style.display = state.signupRole === 'manager' ? 'block' : 'none';
+      $('#manager-mode-field').style.display = state.signupRole === 'manager' ? 'block' : 'none';
+    });
+  });
+
+  $$('.manager-mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      $$('.manager-mode-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.managerSignupMode = btn.dataset.mode;
+      $('#manager-create-hint').style.display = state.managerSignupMode === 'create' ? 'block' : 'none';
+      $('#manager-join-code-field').style.display = state.managerSignupMode === 'join' ? 'block' : 'none';
     });
   });
 
@@ -216,6 +227,8 @@ async function init() {
     onSelect: (val) => { state.dashUnit = val; renderDashboard(); },
   });
 
+  document.addEventListener('click', closeAllDriverMenus);
+
   if (isRecoveryLink) return;
 
   let loggedIn = false;
@@ -268,6 +281,25 @@ async function onSignup() {
     }
     if (!fleet) {
       showAuthError(errEl, 'Invalid access code — check with your fleet manager.');
+      return;
+    }
+    fleetCode = fleet.code;
+  }
+  if (role === 'manager' && state.managerSignupMode === 'join') {
+    const entered = $('#signup-manager-fleet-code').value.trim();
+    if (!entered) {
+      showAuthError(errEl, 'Enter the existing fleet code from another manager on your team.');
+      return;
+    }
+    let fleet;
+    try {
+      fleet = await sbFindFleetByCode(entered);
+    } catch (err) {
+      showAuthError(errEl, 'Could not verify that code — try again.');
+      return;
+    }
+    if (!fleet) {
+      showAuthError(errEl, "Couldn't find that fleet code — double check with your team.");
       return;
     }
     fleetCode = fleet.code;
@@ -862,14 +894,19 @@ async function renderUnitsList() {
 
 async function renderDriversList() {
   const list = $('#drivers-list');
+  const statsEl = $('#drivers-stats');
   list.innerHTML = '';
   let drivers;
   try {
     drivers = await sbGetFleetDrivers(state.fleetCode);
   } catch (err) {
+    statsEl.innerHTML = '';
     list.innerHTML = '<div class="empty-state">Could not load drivers — try again in a moment.</div>';
     return;
   }
+  statsEl.innerHTML = `
+    <div class="stat-card"><div class="stat-num">${drivers.length}</div><div class="stat-label">Active drivers</div></div>
+  `;
   if (drivers.length === 0) {
     list.innerHTML = '<div class="empty-state">No drivers have joined with your fleet code yet.</div>';
     return;
@@ -877,14 +914,80 @@ async function renderDriversList() {
   drivers.forEach((d) => {
     const row = document.createElement('div');
     row.className = 'entry-card driver-row';
-    row.innerHTML = `
-      <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
-      <div>
-        <div class="entry-unit">${escapeHtml(d.name)}</div>
-        <div class="entry-meta"><span>${escapeHtml(d.email)}</span>${d.phone ? `<span>${escapeHtml(d.phone)}</span>` : ''}</div>
-      </div>
-    `;
+    renderDriverRowView(row, d);
     list.appendChild(row);
+  });
+}
+
+function closeAllDriverMenus() {
+  $$('.driver-menu.show').forEach((m) => m.classList.remove('show'));
+}
+
+function renderDriverRowView(row, d) {
+  row.classList.remove('driver-row-editing');
+  row.innerHTML = `
+    <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
+    <div class="driver-row-info">
+      <div class="entry-unit">${escapeHtml(d.name)}</div>
+      <div class="entry-meta"><span>${escapeHtml(d.email)}</span>${d.phone ? `<span>${escapeHtml(d.phone)}</span>` : ''}</div>
+      ${d.assigned_unit ? `<div class="driver-assigned">Assigned: ${escapeHtml(d.assigned_unit)}</div>` : ''}
+    </div>
+    <div class="driver-menu-wrap">
+      <button class="unit-icon-btn driver-menu-btn" title="More options" type="button">
+        <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>
+      <div class="driver-menu">
+        <button class="driver-menu-item" data-action="edit" type="button">Edit</button>
+        <button class="driver-menu-item danger" data-action="remove" type="button">Remove</button>
+      </div>
+    </div>
+  `;
+  row.querySelector('.driver-menu-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = row.querySelector('.driver-menu');
+    const willShow = !menu.classList.contains('show');
+    closeAllDriverMenus();
+    if (willShow) menu.classList.add('show');
+  });
+  row.querySelector('[data-action="edit"]').addEventListener('click', () => {
+    closeAllDriverMenus();
+    renderDriverRowEdit(row, d);
+  });
+  row.querySelector('[data-action="remove"]').addEventListener('click', async () => {
+    closeAllDriverMenus();
+    if (!confirm(`Remove ${d.name} from your fleet? They'll need to sign up again to rejoin.`)) return;
+    await sbRemoveDriver(d.id);
+    renderDriversList();
+  });
+}
+
+function renderDriverRowEdit(row, d) {
+  row.classList.add('driver-row-editing');
+  row.innerHTML = `
+    <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
+    <div class="driver-row-info driver-edit-form">
+      <input class="field field-inline driver-edit-name" value="${escapeHtml(d.name)}" placeholder="Driver name" />
+      <input class="field field-inline driver-edit-unit" value="${escapeHtml(d.assigned_unit || '')}" placeholder="Assigned truck/trailer (optional)" />
+      <div class="driver-edit-actions">
+        <button class="btn btn-secondary driver-edit-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary driver-edit-save" type="button">Save</button>
+      </div>
+    </div>
+  `;
+  row.querySelector('.driver-edit-cancel').addEventListener('click', () => renderDriverRowView(row, d));
+  row.querySelector('.driver-edit-save').addEventListener('click', async () => {
+    const newName = row.querySelector('.driver-edit-name').value.trim();
+    const newUnit = row.querySelector('.driver-edit-unit').value.trim();
+    if (!newName) { alert('Name cannot be empty.'); return; }
+    const saveBtn = row.querySelector('.driver-edit-save');
+    saveBtn.disabled = true;
+    try {
+      await sbUpdateDriver(d.id, { name: newName, assigned_unit: newUnit || null });
+      renderDriversList();
+    } catch (err) {
+      alert('Could not save changes — try again.');
+      saveBtn.disabled = false;
+    }
   });
 }
 

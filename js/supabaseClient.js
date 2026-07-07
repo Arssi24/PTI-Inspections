@@ -77,6 +77,14 @@ async function sbGetFleetDrivers(fleetCode) {
   return data;
 }
 
+async function sbRemoveDriver(userId) {
+  return requireSb().from('profiles').delete().eq('id', userId);
+}
+
+async function sbUpdateDriver(userId, fields) {
+  return requireSb().from('profiles').update(fields).eq('id', userId);
+}
+
 /* ---------------- fleets ---------------- */
 
 async function sbFindFleetByCode(code) {

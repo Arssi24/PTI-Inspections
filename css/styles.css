@@ -373,7 +373,30 @@ body::before {
   background: var(--primary-gradient); color: #fff; font-weight: 800; font-size: 16px;
   display: flex; align-items: center; justify-content: center;
 }
+.driver-row-info { flex: 1; min-width: 0; }
 .driver-row .entry-meta { margin-top: 3px; }
+.driver-assigned { font-size: 12.5px; color: var(--primary-dark); font-weight: 600; margin-top: 4px; }
+.driver-row.driver-row-editing { align-items: flex-start; }
+
+.driver-menu-wrap { position: relative; flex-shrink: 0; }
+.driver-menu {
+  display: none; position: absolute; top: calc(100% + 4px); right: 0; z-index: 20;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 8px 20px rgba(16,24,40,0.14); min-width: 120px;
+}
+.driver-menu.show { display: block; }
+.driver-menu-item {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; border: none; background: none;
+  font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer;
+}
+.driver-menu-item:hover { background: var(--primary-light); }
+.driver-menu-item.danger { color: var(--red); }
+.driver-menu-item.danger:hover { background: #fbeae8; }
+
+.driver-edit-form { display: flex; flex-direction: column; gap: 8px; }
+.driver-edit-form .field { padding: 9px 12px; font-size: 14px; }
+.driver-edit-actions { display: flex; gap: 8px; margin-top: 2px; }
+.driver-edit-actions .btn { flex: 1; margin-top: 0; padding: 9px; font-size: 13.5px; }
 
 .combo { position: relative; flex: 1; min-width: 150px; }
 .combo-input { width: 100%; }

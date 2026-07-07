@@ -20,6 +20,8 @@ drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
   on public.profiles for select
   using (id = auth.uid());
+-- A second policy on profiles (fleet managers reading their drivers' rows) is added
+-- further down, after current_fleet_code() exists — see below.
 
 -- No client-side insert policy: profiles are created exclusively by the
 -- handle_new_user() trigger below (SECURITY DEFINER, bypasses RLS). This is what makes
@@ -64,6 +66,11 @@ stable
 as $$
   select fleet_code from public.profiles where id = auth.uid()
 $$;
+
+drop policy if exists "Managers can read their fleet's driver profiles" on public.profiles;
+create policy "Managers can read their fleet's driver profiles"
+  on public.profiles for select
+  using (fleet_code = public.current_fleet_code());
 
 
 -- ============ AUTO-CREATE PROFILE (AND FLEET, IF MANAGER) ON SIGNUP ============

@@ -278,6 +278,7 @@
       <div class="dash-tabs">
         <button class="dash-tab active" data-panel="inspections" type="button">Inspections</button>
         <button class="dash-tab" data-panel="units" type="button">Trucks &amp; Trailers</button>
+        <button class="dash-tab" data-panel="drivers" type="button">Drivers</button>
       </div>
 
       <!-- Inspections panel -->
@@ -324,6 +325,12 @@
           <button class="btn btn-primary btn-block" id="btn-add-unit">Add to Fleet</button>
         </div>
         <div id="units-list" class="entry-list"></div>
+      </div>
+
+      <!-- Drivers panel -->
+      <div class="dash-panel" id="panel-drivers">
+        <p class="demo-note">Everyone who's signed up with your fleet code, whether or not they've submitted an inspection yet.</p>
+        <div id="drivers-list" class="entry-list"></div>
       </div>
     </div>
   </section>

@@ -158,6 +158,7 @@ async function init() {
       $(`#panel-${tab.dataset.panel}`).classList.add('active');
       if (tab.dataset.panel === 'units') renderUnitsList();
       if (tab.dataset.panel === 'inspections') renderDashboard();
+      if (tab.dataset.panel === 'drivers') renderDriversList();
     });
   });
 
@@ -859,6 +860,33 @@ async function renderUnitsList() {
   });
 }
 
+async function renderDriversList() {
+  const list = $('#drivers-list');
+  list.innerHTML = '';
+  let drivers;
+  try {
+    drivers = await sbGetFleetDrivers(state.fleetCode);
+  } catch (err) {
+    list.innerHTML = '<div class="empty-state">Could not load drivers — try again in a moment.</div>';
+    return;
+  }
+  if (drivers.length === 0) {
+    list.innerHTML = '<div class="empty-state">No drivers have joined with your fleet code yet.</div>';
+    return;
+  }
+  drivers.forEach((d) => {
+    const row = document.createElement('div');
+    row.className = 'entry-card driver-row';
+    row.innerHTML = `
+      <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div>
+        <div class="entry-unit">${escapeHtml(d.name)}</div>
+        <div class="entry-meta"><span>${escapeHtml(d.email)}</span>${d.phone ? `<span>${escapeHtml(d.phone)}</span>` : ''}</div>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
 
 /* ---------------- fleet manager dashboard ---------------- */
 

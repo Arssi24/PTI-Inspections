@@ -66,6 +66,17 @@ async function sbGetProfile(userId) {
   return data;
 }
 
+async function sbGetFleetDrivers(fleetCode) {
+  const { data, error } = await requireSb()
+    .from('profiles')
+    .select('*')
+    .eq('fleet_code', fleetCode)
+    .eq('role', 'driver')
+    .order('name');
+  if (error) throw error;
+  return data;
+}
+
 /* ---------------- fleets ---------------- */
 
 async function sbFindFleetByCode(code) {

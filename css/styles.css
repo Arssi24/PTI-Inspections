@@ -41,13 +41,25 @@ html, body {
 .screen { display: none; min-height: 100vh; }
 .screen.active { display: block; }
 
+/* ---------- iOS/Android safe-area status bar strip ---------- */
+/* On phones with a notch/dynamic island, the OS status bar (clock, battery, signal) floats
+   on top of the page content unless we reserve real space for it. This fixed strip gives it
+   a branded green backdrop instead of colliding with whatever's underneath. */
+body::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top);
+  background: linear-gradient(135deg, #2fcb82, #159457);
+  z-index: 999;
+}
+
 /* ---------- phone shell (driver screens) ---------- */
 .phone-shell {
   max-width: 460px;
   margin: 0 auto;
   min-height: 100vh;
   background: var(--bg);
-  padding: 20px 20px 40px;
+  padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 20px 40px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -200,7 +212,8 @@ html, body {
 }
 
 .record-topbar {
-  position: absolute; top: 0; left: 0; right: 0; padding: 16px;
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: max(16px, calc(env(safe-area-inset-top) + 12px)) 16px 16px;
   display: flex; align-items: center; justify-content: space-between;
   background: linear-gradient(rgba(0,0,0,0.55), transparent);
   z-index: 5;
@@ -210,7 +223,7 @@ html, body {
   padding: 6px 12px; border-radius: 999px;
 }
 .record-timer-wrap {
-  position: absolute; top: 70px; left: 0; right: 0; text-align: center; z-index: 5;
+  position: absolute; top: calc(70px + env(safe-area-inset-top)); left: 0; right: 0; text-align: center; z-index: 5;
   pointer-events: none;
 }
 .record-timer { color: #fff; font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
@@ -222,12 +235,12 @@ html, body {
 .record-location .icon { width: 13px; height: 13px; }
 
 .tap-hint {
-  position: absolute; top: 175px; left: 0; right: 0; text-align: center; z-index: 5;
+  position: absolute; top: calc(175px + env(safe-area-inset-top)); left: 0; right: 0; text-align: center; z-index: 5;
   color: rgba(255,255,255,0.85); font-size: 13px; padding: 0 30px; pointer-events: none;
 }
 
 .camera-warning {
-  position: absolute; top: 175px; left: 0; right: 0; text-align: center; z-index: 6;
+  position: absolute; top: calc(175px + env(safe-area-inset-top)); left: 0; right: 0; text-align: center; z-index: 6;
   color: #ffb4b0; font-size: 13.5px; font-weight: 600; padding: 0 30px; pointer-events: none;
 }
 
@@ -293,7 +306,7 @@ html, body {
 .empty-state { text-align: center; color: var(--text-mute); padding: 60px 20px; font-size: 14px; }
 
 /* ---------- fleet manager dashboard (desktop-first) ---------- */
-.dashboard { max-width: 1080px; margin: 0 auto; padding: 28px 28px 60px; }
+.dashboard { max-width: 1080px; margin: 0 auto; padding: max(28px, calc(env(safe-area-inset-top) + 16px)) 28px 60px; }
 .dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .dash-title { font-size: 22px; font-weight: 800; }
 .dash-sub { font-size: 13.5px; color: var(--text-mute); }
@@ -353,6 +366,14 @@ html, body {
 .unit-download-btn:hover { color: var(--primary); }
 .unit-remove-btn:hover { color: var(--red); }
 .unit-icon-btn .icon { width: 17px; height: 17px; }
+
+.driver-row { display: flex; align-items: center; gap: 12px; cursor: default; }
+.driver-avatar {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
+  background: var(--primary-gradient); color: #fff; font-weight: 800; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.driver-row .entry-meta { margin-top: 3px; }
 
 .combo { position: relative; flex: 1; min-width: 150px; }
 .combo-input { width: 100%; }

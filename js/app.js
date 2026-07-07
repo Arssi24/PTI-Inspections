@@ -1,54 +1,18 @@
-/* PTI Inspections — clickable demo
-   Storage: IndexedDB, standing in for Supabase (Postgres + Storage) until the real backend is wired up.
-   Everyone hitting this page in the same browser shares one "fleet" of data, simulating real-time sync. */
+/* PTI Inspections
+   Backend: Supabase (Postgres + Auth + Storage) — see supabase/schema.sql and js/supabaseClient.js.
+   Every fleet's data is isolated by Row Level Security, keyed on fleet_code. */
 
 const MIN_SECONDS = { PTI: 4 * 60, HOOK: 60, DROP: 60 };
-const DEFAULT_FLEET_CODE = 'YLM100';
-const DEMO_UNITS = [
-  { unit: 'TRK-104', kind: 'truck' },
-  { unit: 'TRK-207', kind: 'truck' },
-  { unit: 'TRL-318', kind: 'trailer' },
-  { unit: 'TRL-422', kind: 'trailer' },
-  { unit: 'TRK-509', kind: 'truck' },
-];
 
-const ACCOUNTS_KEY = 'pti_accounts';
-const SESSION_KEY = 'pti_session';
-const SEED_ACCOUNTS = [
-  { name: 'Mike Reyes', email: 'mike@demo.pti', phone: '(630) 555-0114', password: 'demo123', role: 'driver', fleetCode: DEFAULT_FLEET_CODE },
-  { name: 'Dana Kowalski', email: 'dana@demo.pti', phone: '(630) 555-0128', password: 'demo123', role: 'driver', fleetCode: DEFAULT_FLEET_CODE },
-  { name: 'Carlos Tran', email: 'carlos@demo.pti', phone: '(630) 555-0139', password: 'demo123', role: 'driver', fleetCode: DEFAULT_FLEET_CODE },
-  { name: 'Ola Petrenko', email: 'ola@demo.pti', phone: '(630) 555-0147', password: 'demo123', role: 'driver', fleetCode: DEFAULT_FLEET_CODE },
-  { name: 'Dana (Dispatch)', email: 'dispatch@demo.pti', phone: '(630) 555-0100', password: 'demo123', role: 'manager', fleetCode: DEFAULT_FLEET_CODE },
-];
-
-function loadAccounts() {
-  try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || []; } catch (e) { return []; }
-}
-function saveAccounts(accounts) {
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-}
-function findAccount(email) {
-  return loadAccounts().find((a) => a.email.toLowerCase() === email.toLowerCase());
-}
-function findManagerByFleetCode(code) {
-  return loadAccounts().find((a) => a.role === 'manager' && a.fleetCode.toLowerCase() === code.toLowerCase());
-}
-function ensureSeedAccounts() {
-  if (loadAccounts().length === 0) saveAccounts(SEED_ACCOUNTS);
-}
 function genFleetCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code;
-  do {
-    code = 'F' + Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  } while (findManagerByFleetCode(code));
-  return code;
+  return 'F' + Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 const state = {
   role: 'driver',
   signupRole: 'driver',
+  userId: null,
   driverName: '',
   driverEmail: '',
   driverPhone: '',
@@ -142,9 +106,12 @@ function setupCombobox({ inputEl, listEl, getOptions, onSelect }) {
 
 document.addEventListener('DOMContentLoaded', init);
 
-function init() {
-  ensureSeedAccounts();
-  ensureSeedUnits();
+async function init() {
+  if (!SUPABASE_READY) {
+    $('.demo-note').innerHTML = '<strong>Supabase is not configured yet.</strong> Fill in <code>js/supabase-config.js</code> with your project URL and anon key (Supabase dashboard → Settings → API), then reload.';
+    $('.demo-note').style.background = '#fdeaea';
+    $('.demo-note').style.borderColor = '#f3c6c6';
+  }
 
   $$('.auth-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -237,7 +204,13 @@ function init() {
     onSelect: (val) => { state.dashUnit = val; renderDashboard(); },
   });
 
-  if (!tryAutoLogin()) showScreen('screen-login');
+  let loggedIn = false;
+  try {
+    loggedIn = await tryAutoLogin();
+  } catch (err) {
+    console.error('Auto-login check failed:', err);
+  }
+  if (!loggedIn) showScreen('screen-login');
 }
 
 /* ---------------- auth ---------------- */
@@ -247,7 +220,7 @@ function showAuthError(el, msg) {
   el.style.display = 'block';
 }
 
-function onSignup() {
+async function onSignup() {
   const name = $('#signup-name').value.trim();
   const email = $('#signup-email').value.trim().toLowerCase();
   const phone = $('#signup-phone').value.trim();
@@ -260,70 +233,124 @@ function onSignup() {
     showAuthError(errEl, 'Fill in your name, email, and password.');
     return;
   }
-  if (findAccount(email)) {
-    showAuthError(errEl, 'An account with that email already exists — log in instead.');
+  if (password.length < 6) {
+    showAuthError(errEl, 'Password must be at least 6 characters.');
     return;
   }
 
-  let fleetCode;
+  let fleetCode = null;
   if (role === 'driver') {
     const entered = $('#signup-fleet-code').value.trim();
     if (!entered) {
       showAuthError(errEl, 'Enter the fleet access code your fleet manager gave you.');
       return;
     }
-    const manager = findManagerByFleetCode(entered);
-    if (!manager) {
+    let fleet;
+    try {
+      fleet = await sbFindFleetByCode(entered);
+    } catch (err) {
+      showAuthError(errEl, 'Could not verify that code — try again.');
+      return;
+    }
+    if (!fleet) {
       showAuthError(errEl, 'Invalid access code — check with your fleet manager.');
       return;
     }
-    fleetCode = manager.fleetCode;
-  } else {
-    fleetCode = genFleetCode();
+    fleetCode = fleet.code;
   }
 
-  const account = { name, email, phone, password, role, fleetCode };
-  const accounts = loadAccounts();
-  accounts.push(account);
-  saveAccounts(accounts);
-  loginAs(account);
+  const btn = $('#btn-signup');
+  btn.disabled = true;
+  try {
+    const { data: signUpData, error: signUpError } = await sbSignUp(email, password);
+    if (signUpError) {
+      showAuthError(errEl, signUpError.message);
+      return;
+    }
+    const user = signUpData.user;
+    if (!user) {
+      showAuthError(errEl, 'Check your email to confirm your account, then log in.');
+      return;
+    }
+
+    if (role === 'manager') {
+      let code = genFleetCode();
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await sbInsertFleet({ code, manager_id: user.id, manager_name: name });
+        lastError = error;
+        if (!error) break;
+        if (error.code === '23505') { code = genFleetCode(); continue; }
+        break;
+      }
+      if (lastError) {
+        showAuthError(errEl, 'Could not create your fleet — try again.');
+        return;
+      }
+      fleetCode = code;
+    }
+
+    const { error: profileError } = await sbInsertProfile({
+      id: user.id, name, email, phone, role, fleet_code: fleetCode,
+    });
+    if (profileError) {
+      showAuthError(errEl, 'Account created but profile setup failed: ' + profileError.message);
+      return;
+    }
+
+    await loginAs({ id: user.id, name, email, phone, role, fleet_code: fleetCode });
+  } finally {
+    btn.disabled = false;
+  }
 }
 
-function onLoginSubmit() {
+async function onLoginSubmit() {
   const email = $('#login-email').value.trim().toLowerCase();
   const password = $('#login-password').value;
   const errEl = $('#login-error');
   errEl.style.display = 'none';
 
-  const account = findAccount(email);
-  if (!account || account.password !== password) {
-    showAuthError(errEl, 'Email or password not recognized.');
-    return;
+  const btn = $('#btn-login');
+  btn.disabled = true;
+  try {
+    const { data, error } = await sbSignIn(email, password);
+    if (error) {
+      showAuthError(errEl, 'Email or password not recognized.');
+      return;
+    }
+    const profile = await sbGetProfile(data.user.id);
+    if (!profile) {
+      showAuthError(errEl, 'Account found but profile is missing — contact support.');
+      return;
+    }
+    await loginAs(profile);
+  } finally {
+    btn.disabled = false;
   }
-  loginAs(account);
 }
 
-function tryAutoLogin() {
-  const email = localStorage.getItem(SESSION_KEY);
-  if (!email) return false;
-  const account = findAccount(email);
-  if (!account) return false;
-  loginAs(account);
+async function tryAutoLogin() {
+  const user = await sbGetSessionUser();
+  if (!user) return false;
+  const profile = await sbGetProfile(user.id);
+  if (!profile) return false;
+  await loginAs(profile);
   return true;
 }
 
-function loginAs(account) {
-  state.driverName = account.name;
-  state.driverEmail = account.email;
-  state.driverPhone = account.phone || '';
-  state.role = account.role;
-  state.fleetCode = account.fleetCode;
-  localStorage.setItem(SESSION_KEY, account.email);
-  if (account.role === 'driver') {
-    $('#home-driver-name').textContent = account.name.split(' ')[0];
+async function loginAs(profile) {
+  state.userId = profile.id;
+  state.driverName = profile.name;
+  state.driverEmail = profile.email;
+  state.driverPhone = profile.phone || '';
+  state.role = profile.role;
+  state.fleetCode = profile.fleet_code;
+
+  if (profile.role === 'driver') {
+    $('#home-driver-name').textContent = profile.name.split(' ')[0];
     showScreen('screen-home');
   } else {
-    $('#fleet-code-value').textContent = account.fleetCode;
+    $('#fleet-code-value').textContent = profile.fleet_code;
     state.dashDriver = '';
     state.dashUnit = '';
     state.dashType = '';
@@ -335,8 +362,8 @@ function loginAs(account) {
   }
 }
 
-function logout() {
-  localStorage.removeItem(SESSION_KEY);
+async function logout() {
+  await sbSignOut();
   showScreen('screen-login');
 }
 
@@ -603,6 +630,10 @@ function capturePhotoWithMarker(xPct, yPct) {
   $('#defect-count').textContent = state.defects.length;
 }
 
+function newId() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10));
+}
+
 async function onSaveUpload() {
   const type = state.currentType;
   const unit = state.currentUnit;
@@ -612,22 +643,45 @@ async function onSaveUpload() {
   const fleetCode = state.fleetCode;
   const location = state.currentLocation;
   const durationSec = Math.round(state.finalDurationSec);
-  const defects = state.defects;
+  const defectsRaw = state.defects;
   const mimeType = state.recorder && state.recorder.mimeType ? state.recorder.mimeType : 'video/webm';
   const chunks = state.recordedChunks.slice();
-
-  const id = 'insp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  const createdAt = Date.now();
+  const id = newId();
 
   showToast();
   showScreen('screen-home');
 
   try {
     const videoBlob = new Blob(chunks, { type: mimeType });
-    await dbPut('videos', { id, blob: videoBlob });
-    await dbPut('inspections', {
-      id, type, unit, driverName, driverEmail, driverPhone, fleetCode, durationSec, defects, createdAt, mimeType, location,
+    const videoExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const videoPath = `${fleetCode}/${id}/video.${videoExt}`;
+    await sbUploadBlob(videoPath, videoBlob);
+
+    const defects = [];
+    for (let i = 0; i < defectsRaw.length; i++) {
+      const d = defectsRaw[i];
+      const photoPath = `${fleetCode}/${id}/defect-${i}.jpg`;
+      await sbUploadDataUrl(photoPath, d.photo);
+      defects.push({ id: d.id, t: d.t, x: d.x, y: d.y, photo_path: photoPath });
+    }
+
+    const { error } = await sbInsertInspection({
+      id,
+      type,
+      unit,
+      driver_id: state.userId,
+      driver_name: driverName,
+      driver_email: driverEmail,
+      driver_phone: driverPhone,
+      fleet_code: fleetCode,
+      duration_sec: durationSec,
+      defects,
+      video_path: videoPath,
+      lat: location ? location.lat : null,
+      lng: location ? location.lng : null,
+      location_accuracy_m: location ? location.accuracyM : null,
     });
+    if (error) throw error;
   } catch (err) {
     console.error('Upload failed', err);
   } finally {
@@ -639,7 +693,6 @@ let toastTimer = null;
 function showToast() {
   const toast = $('#upload-toast');
   toast.classList.remove('done');
-  $('.toast-title', toast) || null;
   toast.querySelector('.toast-title').textContent = 'Uploading…';
   toast.querySelector('.toast-sub').textContent = "Safe to close the app — it'll keep going in the background.";
   toast.classList.add('show');
@@ -657,28 +710,22 @@ function finishToast() {
 
 async function openHistory() {
   showScreen('screen-history');
-  const all = await dbGetAll('inspections');
-  const mine = all
-    .filter((r) => r.driverEmail === state.driverEmail && r.fleetCode === state.fleetCode)
-    .sort((a, b) => b.createdAt - a.createdAt);
   const list = $('#history-list');
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+
+  const all = await sbGetInspections(state.fleetCode);
+  const mine = all.filter((r) => r.driver_email === state.driverEmail);
   list.innerHTML = '';
   if (mine.length === 0) {
     list.innerHTML = '<div class="empty-state">No submissions yet.<br>Run a PTI, Hook, or Drop to see it here.</div>';
     return;
   }
-  mine.forEach((r) => list.appendChild(renderEntryCard(r, false)));
+  for (const r of mine) {
+    list.appendChild(await renderEntryCard(r, false));
+  }
 }
 
 /* ---------------- fleet units (trucks & trailers) ---------------- */
-
-async function ensureSeedUnits() {
-  const existing = await dbGetAll('units');
-  if (existing.length > 0) return;
-  for (const d of DEMO_UNITS) {
-    await dbPut('units', { id: 'unit_' + d.unit, unit: d.unit, kind: d.kind, fleetCode: DEFAULT_FLEET_CODE, addedAt: Date.now() });
-  }
-}
 
 async function onAddUnit() {
   const input = $('#unit-number-input');
@@ -690,27 +737,18 @@ async function onAddUnit() {
     showAuthError(errEl, 'Enter a unit number.');
     return;
   }
-  const existing = await dbGetAll('units');
-  const dupe = existing.find((u) => u.fleetCode === state.fleetCode && u.unit.toLowerCase() === val.toLowerCase());
-  if (dupe) {
-    showAuthError(errEl, 'That unit is already in your fleet.');
+
+  const { error } = await sbInsertUnit({ unit: val, kind: state.unitKind, fleet_code: state.fleetCode });
+  if (error) {
+    showAuthError(errEl, error.code === '23505' ? 'That unit is already in your fleet.' : 'Could not add unit — try again.');
     return;
   }
-
-  await dbPut('units', {
-    id: 'unit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-    unit: val,
-    kind: state.unitKind,
-    fleetCode: state.fleetCode,
-    addedAt: Date.now(),
-  });
   input.value = '';
   renderUnitsList();
 }
 
 async function renderUnitsList() {
-  const all = await dbGetAll('units');
-  const mine = all.filter((u) => u.fleetCode === state.fleetCode).sort((a, b) => a.unit.localeCompare(b.unit));
+  const mine = await sbGetUnits(state.fleetCode);
   const list = $('#units-list');
   list.innerHTML = '';
   if (mine.length === 0) {
@@ -730,7 +768,7 @@ async function renderUnitsList() {
       </button>
     `;
     row.querySelector('.unit-remove-btn').addEventListener('click', async () => {
-      await dbDelete('units', u.id);
+      await sbDeleteUnit(u.id);
       renderUnitsList();
     });
     list.appendChild(row);
@@ -745,8 +783,7 @@ async function openDemoQrs() {
   const fallback = $('#qr-fallback-note');
   grid.innerHTML = '';
 
-  const allUnits = await dbGetAll('units');
-  const units = allUnits.filter((u) => u.fleetCode === state.fleetCode).sort((a, b) => a.unit.localeCompare(b.unit));
+  const units = await sbGetUnits(state.fleetCode);
 
   if (units.length === 0) {
     grid.style.display = 'none';
@@ -781,7 +818,6 @@ async function openDemoQrs() {
 
 function inRange(ts, range) {
   const now = new Date();
-  const d = new Date(ts);
   const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
   const todayStart = startOfDay(now);
   if (range === 'today') return ts >= todayStart;
@@ -791,19 +827,20 @@ function inRange(ts, range) {
 }
 
 async function renderDashboard() {
-  const allRaw = await dbGetAll('inspections');
-  const all = allRaw.filter((r) => r.fleetCode === state.fleetCode).sort((a, b) => b.createdAt - a.createdAt);
+  const list = $('#dash-list');
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
 
-  const registeredUnits = (await dbGetAll('units')).filter((u) => u.fleetCode === state.fleetCode).map((u) => u.unit);
+  const all = await sbGetInspections(state.fleetCode);
+  const registeredUnits = (await sbGetUnits(state.fleetCode)).map((u) => u.unit);
 
-  const existingDrivers = Array.from(new Set(all.map((r) => r.driverName))).sort();
+  const existingDrivers = Array.from(new Set(all.map((r) => r.driver_name))).sort();
   const existingUnits = Array.from(new Set([...registeredUnits, ...all.map((r) => r.unit)])).sort();
   state.dashKnownDrivers = existingDrivers;
   state.dashKnownUnits = existingUnits;
 
   const filtered = all.filter((r) =>
-    inRange(r.createdAt, state.dashRange) &&
-    (!state.dashDriver || r.driverName === state.dashDriver) &&
+    inRange(new Date(r.created_at).getTime(), state.dashRange) &&
+    (!state.dashDriver || r.driver_name === state.dashDriver) &&
     (!state.dashType || r.type === state.dashType) &&
     (!state.dashUnit || r.unit === state.dashUnit)
   );
@@ -816,27 +853,35 @@ async function renderDashboard() {
     <div class="stat-card"><div class="stat-num">${all.length}</div><div class="stat-label">Total on record</div></div>
   `;
 
-  const list = $('#dash-list');
   list.innerHTML = '';
   if (filtered.length === 0) {
     list.innerHTML = '<div class="empty-state">No inspections match these filters.</div>';
     return;
   }
-  filtered.forEach((r) => list.appendChild(renderEntryCard(r, true)));
+  for (const r of filtered) {
+    list.appendChild(await renderEntryCard(r, true));
+  }
 }
 
-function renderEntryCard(r, showDriver) {
+async function renderEntryCard(r, showDriver) {
   const card = document.createElement('div');
   card.className = 'entry-card';
   const hasDefects = r.defects && r.defects.length > 0;
   const unit = escapeHtml(r.unit);
-  const driverName = escapeHtml(r.driverName);
-  const driverEmail = escapeHtml(r.driverEmail);
-  const driverPhone = escapeHtml(r.driverPhone);
+  const driverName = escapeHtml(r.driver_name);
+  const driverEmail = escapeHtml(r.driver_email);
+  const driverPhone = escapeHtml(r.driver_phone);
+  const createdAtMs = new Date(r.created_at).getTime();
 
-  const locationHtml = r.location
-    ? `<a href="https://www.google.com/maps?q=${r.location.lat},${r.location.lng}" target="_blank" rel="noopener">${r.location.lat.toFixed(5)}, ${r.location.lng.toFixed(5)} (±${r.location.accuracyM}m)</a>`
+  const locationHtml = (r.lat != null && r.lng != null)
+    ? `<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)} (±${r.location_accuracy_m}m)</a>`
     : 'Not recorded';
+
+  let photosHtml = '';
+  if (hasDefects) {
+    const urls = await Promise.all(r.defects.map((d) => sbSignedUrl(d.photo_path)));
+    photosHtml = `<div class="entry-photos">${r.defects.map((d, i) => `<img src="${urls[i] || ''}" title="Flagged at ${fmtTime(d.t)}" />`).join('')}</div>`;
+  }
 
   card.innerHTML = `
     <div class="entry-top">
@@ -844,18 +889,18 @@ function renderEntryCard(r, showDriver) {
         <span class="entry-type ${r.type}">${r.type}</span>
         <span class="entry-unit">${unit}</span>
       </div>
-      <div style="font-size:12.5px; color:var(--text-mute);">${fmtWhen(r.createdAt)}</div>
+      <div style="font-size:12.5px; color:var(--text-mute);">${fmtWhen(createdAtMs)}</div>
     </div>
     <div class="entry-meta">
       ${showDriver ? `<span class="entry-driver">${driverName}</span>` : ''}
-      <span>Video: ${fmtTime(r.durationSec)}</span>
+      <span>Video: ${fmtTime(r.duration_sec)}</span>
       ${hasDefects ? `<span class="entry-defect-flag"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${r.defects.length} defect${r.defects.length > 1 ? 's' : ''} flagged</span>` : '<span>No defects flagged</span>'}
     </div>
     <div class="entry-details">
-      <div class="entry-detail-row">Unit ${unit} · ${r.type} · ${new Date(r.createdAt).toLocaleString()}</div>
+      <div class="entry-detail-row">Unit ${unit} · ${r.type} · ${new Date(r.created_at).toLocaleString()}</div>
       ${showDriver ? `<div class="entry-detail-row">Driver: ${driverName}${driverEmail ? ` · <a href="mailto:${driverEmail}">${driverEmail}</a>` : ''}${driverPhone ? ` · ${driverPhone}` : ''}</div>` : ''}
       <div class="entry-detail-row">Location: ${locationHtml}</div>
-      ${hasDefects ? `<div class="entry-photos">${r.defects.map((d) => `<img src="${d.photo}" title="Flagged at ${fmtTime(d.t)}" />`).join('')}</div>` : ''}
+      ${photosHtml}
     </div>
   `;
   card.addEventListener('click', () => card.classList.toggle('open'));

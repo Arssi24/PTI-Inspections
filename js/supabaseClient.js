@@ -19,8 +19,11 @@ function requireSb() {
 
 /* ---------------- auth ---------------- */
 
-async function sbSignUp(email, password) {
-  return requireSb().auth.signUp({ email, password });
+async function sbSignUp(email, password, metadata) {
+  // metadata (name/phone/role/fleet_code) lands in auth.users.raw_user_meta_data, which
+  // the handle_new_user() DB trigger reads to create the profile (and fleet, if manager)
+  // server-side — see supabase/schema.sql. The client never inserts these rows directly.
+  return requireSb().auth.signUp({ email, password, options: { data: metadata } });
 }
 
 async function sbSignIn(email, password) {
@@ -36,11 +39,19 @@ async function sbGetSessionUser() {
   return data.session ? data.session.user : null;
 }
 
-/* ---------------- profiles ---------------- */
-
-async function sbInsertProfile(profile) {
-  return requireSb().from('profiles').insert(profile);
+async function sbSendPasswordReset(email, redirectTo) {
+  return requireSb().auth.resetPasswordForEmail(email, { redirectTo });
 }
+
+async function sbUpdatePassword(newPassword) {
+  return requireSb().auth.updateUser({ password: newPassword });
+}
+
+function sbOnAuthEvent(callback) {
+  requireSb().auth.onAuthStateChange((event, session) => callback(event, session));
+}
+
+/* ---------------- profiles ---------------- */
 
 async function sbGetProfile(userId) {
   const { data, error } = await requireSb().from('profiles').select('*').eq('id', userId).maybeSingle();
@@ -54,10 +65,6 @@ async function sbFindFleetByCode(code) {
   const { data, error } = await requireSb().from('fleets').select('*').ilike('code', code).maybeSingle();
   if (error) throw error;
   return data;
-}
-
-async function sbInsertFleet(fleet) {
-  return requireSb().from('fleets').insert(fleet);
 }
 
 /* ---------------- units ---------------- */

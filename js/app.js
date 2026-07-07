@@ -4,11 +4,6 @@
 
 const MIN_SECONDS = { PTI: 4 * 60, HOOK: 60, DROP: 60 };
 
-function genFleetCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return 'F' + Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
 const state = {
   role: 'driver',
   signupRole: 'driver',
@@ -113,6 +108,20 @@ async function init() {
     $('.demo-note').style.borderColor = '#f3c6c6';
   }
 
+  // A password-recovery link creates a real (temporary) session, so it'd otherwise sail
+  // straight past this screen via tryAutoLogin() below and land on home/dashboard instead
+  // of letting the user actually set a new password. Catch it two ways: the URL Supabase
+  // redirects back with (belt), and the auth event it fires once detected (suspenders).
+  const isRecoveryLink = window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery');
+  if (SUPABASE_READY) {
+    sbOnAuthEvent((event) => {
+      if (event === 'PASSWORD_RECOVERY') showScreen('screen-set-new-password');
+    });
+  }
+  if (isRecoveryLink) {
+    showScreen('screen-set-new-password');
+  }
+
   $$('.auth-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       $$('.auth-tab').forEach((t) => t.classList.remove('active'));
@@ -156,6 +165,9 @@ async function init() {
 
   $('#btn-signup').addEventListener('click', onSignup);
   $('#btn-login').addEventListener('click', onLoginSubmit);
+  $('#btn-show-forgot-password').addEventListener('click', () => showScreen('screen-forgot-password'));
+  $('#btn-send-reset').addEventListener('click', onForgotPasswordSubmit);
+  $('#btn-set-new-password').addEventListener('click', onSetNewPasswordSubmit);
   $('#btn-logout').addEventListener('click', logout);
   $('#btn-logout-dash').addEventListener('click', logout);
   $('#btn-history').addEventListener('click', openHistory);
@@ -203,6 +215,8 @@ async function init() {
     getOptions: () => state.dashKnownUnits || [],
     onSelect: (val) => { state.dashUnit = val; renderDashboard(); },
   });
+
+  if (isRecoveryLink) return;
 
   let loggedIn = false;
   try {
@@ -262,43 +276,84 @@ async function onSignup() {
   const btn = $('#btn-signup');
   btn.disabled = true;
   try {
-    const { data: signUpData, error: signUpError } = await sbSignUp(email, password);
-    if (signUpError) {
-      showAuthError(errEl, signUpError.message);
+    // Profile (and fleet, for managers) are created server-side by the handle_new_user()
+    // DB trigger — see supabase/schema.sql — from this metadata. That's what lets signup
+    // work correctly whether or not "Confirm email" is turned on: the trigger runs inside
+    // the same transaction as the auth.users insert, before any client session exists.
+    const { data, error } = await sbSignUp(email, password, { name, phone, role, fleet_code: fleetCode });
+    if (error) {
+      showAuthError(errEl, error.message);
       return;
     }
-    const user = signUpData.user;
-    if (!user) {
-      showAuthError(errEl, 'Check your email to confirm your account, then log in.');
+    if (!data.session) {
+      showCheckEmailScreen('Click the confirmation link we just emailed you, then come back and log in.');
       return;
     }
-
-    if (role === 'manager') {
-      let code = genFleetCode();
-      let lastError = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const { error } = await sbInsertFleet({ code, manager_id: user.id, manager_name: name });
-        lastError = error;
-        if (!error) break;
-        if (error.code === '23505') { code = genFleetCode(); continue; }
-        break;
-      }
-      if (lastError) {
-        showAuthError(errEl, 'Could not create your fleet — try again.');
-        return;
-      }
-      fleetCode = code;
-    }
-
-    const { error: profileError } = await sbInsertProfile({
-      id: user.id, name, email, phone, role, fleet_code: fleetCode,
-    });
-    if (profileError) {
-      showAuthError(errEl, 'Account created but profile setup failed: ' + profileError.message);
+    const profile = await sbGetProfile(data.user.id);
+    if (!profile) {
+      showAuthError(errEl, 'Account created — give it a few seconds and try logging in.');
       return;
     }
+    await loginAs(profile);
+  } finally {
+    btn.disabled = false;
+  }
+}
 
-    await loginAs({ id: user.id, name, email, phone, role, fleet_code: fleetCode });
+function showCheckEmailScreen(message) {
+  $('#check-email-message').textContent = message;
+  showScreen('screen-check-email');
+}
+
+function currentSiteUrl() {
+  return window.location.origin + window.location.pathname;
+}
+
+async function onForgotPasswordSubmit() {
+  const email = $('#forgot-email').value.trim().toLowerCase();
+  const errEl = $('#forgot-error');
+  errEl.style.display = 'none';
+  if (!email) {
+    showAuthError(errEl, 'Enter your email first.');
+    return;
+  }
+  const btn = $('#btn-send-reset');
+  btn.disabled = true;
+  try {
+    const { error } = await sbSendPasswordReset(email, currentSiteUrl());
+    if (error) {
+      showAuthError(errEl, error.message);
+      return;
+    }
+    showCheckEmailScreen("If that email has an account, we've sent a password reset link to it.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function onSetNewPasswordSubmit() {
+  const password = $('#new-password').value;
+  const errEl = $('#new-password-error');
+  errEl.style.display = 'none';
+  if (password.length < 6) {
+    showAuthError(errEl, 'Password must be at least 6 characters.');
+    return;
+  }
+  const btn = $('#btn-set-new-password');
+  btn.disabled = true;
+  try {
+    const { error } = await sbUpdatePassword(password);
+    if (error) {
+      showAuthError(errEl, error.message);
+      return;
+    }
+    const user = await sbGetSessionUser();
+    const profile = user ? await sbGetProfile(user.id) : null;
+    if (profile) {
+      await loginAs(profile);
+    } else {
+      showScreen('screen-login');
+    }
   } finally {
     btn.disabled = false;
   }
@@ -747,6 +802,26 @@ async function onAddUnit() {
   renderUnitsList();
 }
 
+function renderQrInto(el, text, size) {
+  el.innerHTML = '';
+  if (!window.QRCode) {
+    el.textContent = text;
+    return;
+  }
+  new QRCode(el, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+}
+
+function downloadUnitQr(unit) {
+  const holder = document.createElement('div');
+  renderQrInto(holder, unit, 500);
+  const canvas = holder.querySelector('canvas');
+  if (!canvas) return;
+  const link = document.createElement('a');
+  link.download = `${unit}-qr-code.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
 async function renderUnitsList() {
   const mine = await sbGetUnits(state.fleetCode);
   const list = $('#units-list');
@@ -760,13 +835,23 @@ async function renderUnitsList() {
     row.className = 'entry-card unit-row';
     row.innerHTML = `
       <div class="unit-row-left">
-        <span class="kind-badge ${u.kind}">${u.kind === 'truck' ? 'TRUCK' : 'TRAILER'}</span>
-        <span class="entry-unit">${escapeHtml(u.unit)}</span>
+        <div class="unit-qr-thumb"></div>
+        <div>
+          <span class="kind-badge ${u.kind}">${u.kind === 'truck' ? 'TRUCK' : 'TRAILER'}</span>
+          <div class="entry-unit">${escapeHtml(u.unit)}</div>
+        </div>
       </div>
-      <button class="unit-remove-btn" title="Remove from fleet">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-      </button>
+      <div class="unit-row-actions">
+        <button class="unit-icon-btn unit-download-btn" title="Download QR code to print">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button class="unit-icon-btn unit-remove-btn" title="Remove from fleet">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </div>
     `;
+    renderQrInto(row.querySelector('.unit-qr-thumb'), u.unit, 56);
+    row.querySelector('.unit-download-btn').addEventListener('click', () => downloadUnitQr(u.unit));
     row.querySelector('.unit-remove-btn').addEventListener('click', async () => {
       await sbDeleteUnit(u.id);
       renderUnitsList();

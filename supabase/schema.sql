@@ -21,10 +21,11 @@ create policy "Users can read own profile"
   on public.profiles for select
   using (id = auth.uid());
 
+-- No client-side insert policy: profiles are created exclusively by the
+-- handle_new_user() trigger below (SECURITY DEFINER, bypasses RLS). This is what makes
+-- email-confirmation-required signups work — the client has no session yet at signup
+-- time, so it couldn't pass an `auth.uid()` check even if we gave it an insert policy.
 drop policy if exists "Users can insert own profile" on public.profiles;
-create policy "Users can insert own profile"
-  on public.profiles for insert
-  with check (id = auth.uid());
 
 
 -- ============ FLEETS ============
@@ -46,10 +47,10 @@ create policy "Anyone can look up a fleet code"
   on public.fleets for select
   using (true);
 
+-- No client-side insert policy here either — see the comment on public.profiles above.
+-- Fleets are created by the same handle_new_user() trigger, in the same transaction as
+-- the profile, so a manager's fleet_code exists before they've even confirmed their email.
 drop policy if exists "Managers can insert their own fleet" on public.fleets;
-create policy "Managers can insert their own fleet"
-  on public.fleets for insert
-  with check (manager_id = auth.uid());
 
 
 -- Helper: the fleet_code of whoever is currently logged in. SECURITY DEFINER lets this
@@ -63,6 +64,60 @@ stable
 as $$
   select fleet_code from public.profiles where id = auth.uid()
 $$;
+
+
+-- ============ AUTO-CREATE PROFILE (AND FLEET, IF MANAGER) ON SIGNUP ============
+-- Fires inside the same database transaction as the auth.users row itself, so it runs
+-- whether or not "Confirm email" is turned on — there's never a gap where a confirmed
+-- user exists without a profile. SECURITY DEFINER lets it write to profiles/fleets even
+-- though the signing-up client has no session yet (can't pass an auth.uid() RLS check).
+-- name/phone/role/fleet_code are passed from the client via supabase.auth.signUp's
+-- `options.data`, which Postgres receives as new.raw_user_meta_data.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role text := coalesce(new.raw_user_meta_data->>'role', 'driver');
+  v_name text := coalesce(new.raw_user_meta_data->>'name', '');
+  v_phone text := new.raw_user_meta_data->>'phone';
+  v_fleet_code text := new.raw_user_meta_data->>'fleet_code';
+  v_candidate text;
+  v_attempt int := 0;
+  v_chars text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+begin
+  if v_role = 'manager' then
+    loop
+      v_attempt := v_attempt + 1;
+      v_candidate := 'F';
+      for i in 1..5 loop
+        v_candidate := v_candidate || substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1);
+      end loop;
+      begin
+        insert into public.fleets (code, manager_id, manager_name) values (v_candidate, new.id, v_name);
+        v_fleet_code := v_candidate;
+        exit;
+      exception when unique_violation then
+        if v_attempt >= 6 then
+          raise exception 'Could not generate a unique fleet code, try signing up again';
+        end if;
+      end;
+    end loop;
+  end if;
+
+  insert into public.profiles (id, name, email, phone, role, fleet_code)
+  values (new.id, v_name, new.email, v_phone, v_role, v_fleet_code);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
 
 
 -- ============ UNITS (trucks & trailers) ============

@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-<title>PTI Inspections — Demo</title>
+<title>YLM Record PTI</title>
 <link rel="stylesheet" href="css/styles.css" />
 
 <link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#2a2f50" />
+<meta name="theme-color" content="#5b3fd6" />
 <link rel="icon" href="assets/icons/icon-192.png" />
 <link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="PTI" />
+<meta name="apple-mobile-web-app-title" content="YLM Record PTI" />
 </head>
 <body>
 
@@ -22,8 +22,8 @@
   <section class="screen" id="screen-login" data-screen>
     <div class="phone-shell">
       <div class="brand-block">
-        <div class="brand-mark">PTI</div>
-        <h1>PTI Inspections</h1>
+        <div class="brand-mark">YLM</div>
+        <h1>YLM Record PTI</h1>
         <p class="sub">Fleet walkaround &amp; inspection app</p>
       </div>
 
@@ -70,7 +70,57 @@
           <input class="field" type="password" id="login-password" placeholder="Your password" autocomplete="current-password" />
           <div class="field-error" id="login-error" style="display:none;"></div>
           <button class="btn btn-primary btn-block" id="btn-login">Log In</button>
+          <button class="btn btn-link btn-block" id="btn-show-forgot-password" type="button">Forgot password?</button>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FORGOT PASSWORD ============ -->
+  <section class="screen" id="screen-forgot-password" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>Reset your password</h1>
+        <p class="sub">We'll email you a link to set a new one</p>
+      </div>
+      <div class="card">
+        <label class="field-label">Email</label>
+        <input class="field" type="email" id="forgot-email" placeholder="you@company.com" autocomplete="email" />
+        <div class="field-error" id="forgot-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-send-reset">Send reset link</button>
+        <button class="btn btn-link btn-block" data-back="screen-login" type="button">Back to log in</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHECK YOUR EMAIL (post signup / post reset request) ============ -->
+  <section class="screen" id="screen-check-email" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>Check your email</h1>
+        <p class="sub" id="check-email-message">We sent you a link — open it to continue.</p>
+      </div>
+      <div class="card">
+        <button class="btn btn-primary btn-block" data-back="screen-login" type="button">Back to log in</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SET NEW PASSWORD (landed here from the email link) ============ -->
+  <section class="screen" id="screen-set-new-password" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>Set a new password</h1>
+        <p class="sub">Choose a new password for your account</p>
+      </div>
+      <div class="card">
+        <label class="field-label">New password</label>
+        <input class="field" type="password" id="new-password" placeholder="At least 6 characters" autocomplete="new-password" />
+        <div class="field-error" id="new-password-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-set-new-password">Save new password</button>
       </div>
     </div>
   </section>

@@ -228,11 +228,15 @@
       </div>
 
       <div class="card manual-entry">
-        <label class="field-label">Or enter unit number manually</label>
+        <label class="field-label">Or pick a unit manually</label>
         <div class="manual-row">
-          <input class="field" type="text" id="manual-unit" placeholder="e.g. TRK-104" />
+          <div class="combo" id="combo-manual-unit">
+            <input class="field field-inline combo-input" type="text" id="manual-unit" placeholder="Start typing a truck/trailer number…" autocomplete="off" />
+            <div class="combo-list" id="manual-unit-list"></div>
+          </div>
           <button class="btn btn-primary" id="btn-manual-submit">Use</button>
         </div>
+        <div class="field-error" id="manual-unit-error" style="display:none;"></div>
       </div>
     </div>
   </section>
@@ -404,6 +408,14 @@
     </div>
   </section>
 
+</div>
+
+<!-- ============ PHOTO LIGHTBOX (overlay, not a screen) ============ -->
+<div class="lightbox" id="photo-lightbox">
+  <button class="lightbox-close" id="lightbox-close" type="button">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <img id="lightbox-img" src="" alt="Defect photo" />
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>

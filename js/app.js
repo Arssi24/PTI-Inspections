@@ -235,8 +235,19 @@ async function init() {
     getOptions: () => state.dashKnownUnits || [],
     onSelect: (val) => { state.dashUnit = val; renderDashboard(); },
   });
+  setupCombobox({
+    inputEl: $('#manual-unit'),
+    listEl: $('#manual-unit-list'),
+    getOptions: () => state.availableUnits || [],
+    onSelect: () => { $('#manual-unit-error').style.display = 'none'; },
+  });
 
   document.addEventListener('click', closeAllDriverMenus);
+
+  $('#lightbox-close').addEventListener('click', () => $('#photo-lightbox').classList.remove('show'));
+  $('#photo-lightbox').addEventListener('click', (e) => {
+    if (e.target.id === 'photo-lightbox') $('#photo-lightbox').classList.remove('show');
+  });
 
   $$('.password-toggle-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -492,8 +503,21 @@ function startFlow(type) {
     : type === 'HOOK' ? 'Scan trailer to Hook'
     : 'Scan trailer to Drop';
   $('#scan-title').textContent = state.scanTargetTitle;
+  $('#manual-unit').value = '';
+  $('#manual-unit-error').style.display = 'none';
   showScreen('screen-scan');
   startScanCamera();
+  loadAvailableUnits();
+}
+
+async function loadAvailableUnits() {
+  try {
+    const units = await sbGetUnits(state.fleetCode);
+    state.availableUnits = units.map((u) => u.unit);
+  } catch (err) {
+    console.warn('Could not load units list', err);
+    state.availableUnits = [];
+  }
 }
 
 async function startScanCamera() {
@@ -541,8 +565,16 @@ function stopScanLoop() {
 
 function onManualUnitSubmit() {
   const val = $('#manual-unit').value.trim();
+  const errEl = $('#manual-unit-error');
+  errEl.style.display = 'none';
   if (!val) return;
-  onUnitScanned(val);
+  const match = (state.availableUnits || []).find((u) => u.toLowerCase() === val.toLowerCase());
+  if (!match) {
+    errEl.textContent = 'Not a registered truck/trailer — pick one from the list, or check with your fleet manager.';
+    errEl.style.display = 'block';
+    return;
+  }
+  onUnitScanned(match);
 }
 
 function onUnitScanned(unitCode) {
@@ -717,6 +749,30 @@ function onRetake() {
   enterRecordScreen();
 }
 
+let sharedAudioCtx = null;
+function playShutterSound() {
+  try {
+    sharedAudioCtx = sharedAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = sharedAudioCtx;
+    const now = ctx.currentTime;
+    [{ delay: 0, freq: 1800 }, { delay: 0.06, freq: 1200 }].forEach(({ delay, freq }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + delay);
+      gain.gain.linearRampToValueAtTime(0.25, now + delay + 0.003);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.05);
+    });
+  } catch (err) {
+    console.warn('Could not play shutter sound', err);
+  }
+}
+
 function onTapFlag(e) {
   const btn = $('#btn-record-toggle');
   if (!btn.classList.contains('recording')) return;
@@ -728,6 +784,8 @@ function onTapFlag(e) {
   const y = e.clientY - rect.top;
   const xPct = x / rect.width;
   const yPct = y / rect.height;
+
+  playShutterSound();
 
   const dot = document.createElement('div');
   dot.className = 'marker-dot';
@@ -1178,8 +1236,21 @@ async function renderEntryCard(r, showDriver) {
   let photosHtml = '';
   if (hasDefects) {
     const urls = await Promise.all(r.defects.map((d) => sbSignedUrl(d.photo_path)));
-    photosHtml = `<div class="entry-photos">${r.defects.map((d, i) => `<img src="${urls[i] || ''}" title="Flagged at ${fmtTime(d.t)}" />`).join('')}</div>`;
+    photosHtml = `<div class="entry-photos">${r.defects.map((d, i) => `<img src="${urls[i] || ''}" data-full="${urls[i] || ''}" title="Flagged at ${fmtTime(d.t)}" />`).join('')}</div>`;
   }
+
+  const videoUrl = r.video_path ? await sbSignedUrl(r.video_path) : null;
+  const videoHtml = videoUrl
+    ? `<div class="entry-video-wrap">
+         <video controls playsinline preload="metadata" src="${videoUrl}"></video>
+         <div class="entry-video-actions">
+           <button class="entry-download-btn" data-video-url="${videoUrl}" data-video-name="${unit}-${r.type}-${r.id}.${videoUrl.includes('.mp4') ? 'mp4' : 'webm'}" type="button">
+             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+             Download video
+           </button>
+         </div>
+       </div>`
+    : '<div class="entry-detail-row">Video unavailable.</div>';
 
   card.innerHTML = `
     <div class="entry-top">
@@ -1198,9 +1269,52 @@ async function renderEntryCard(r, showDriver) {
       <div class="entry-detail-row">Unit ${unit} · ${r.type} · ${new Date(r.created_at).toLocaleString()}</div>
       ${showDriver ? `<div class="entry-detail-row">Driver: ${driverName}${driverEmail ? ` · <a href="mailto:${driverEmail}">${driverEmail}</a>` : ''}${driverPhone ? ` · ${driverPhone}` : ''}</div>` : ''}
       <div class="entry-detail-row">Location: ${locationHtml}</div>
+      ${videoHtml}
       ${photosHtml}
     </div>
   `;
   card.addEventListener('click', () => card.classList.toggle('open'));
+  card.querySelectorAll('.entry-photos img').forEach((img) => {
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openLightbox(img.dataset.full);
+    });
+  });
+  const downloadBtn = card.querySelector('.entry-download-btn');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      downloadFile(downloadBtn.dataset.videoUrl, downloadBtn.dataset.videoName, downloadBtn);
+    });
+  }
+  card.querySelector('video, .entry-video-actions')?.addEventListener('click', (e) => e.stopPropagation());
   return card;
+}
+
+function openLightbox(url) {
+  if (!url) return;
+  $('#lightbox-img').src = url;
+  $('#photo-lightbox').classList.add('show');
+}
+
+async function downloadFile(url, filename, btn) {
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Downloading…';
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+  } catch (err) {
+    console.error('Download failed', err);
+    alert('Could not download the video — try again.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
 }

@@ -69,9 +69,9 @@ body::before {
 .brand-block { text-align: center; margin-top: 40px; }
 .brand-mark {
   width: 64px; height: 64px; border-radius: 18px;
-  background: var(--primary-gradient);
-  box-shadow: 0 6px 16px rgba(91,63,214,0.28);
-  color: #fff; font-weight: 800; font-size: 18px;
+  background: linear-gradient(135deg, #4dd8ec, #0891b2);
+  box-shadow: 0 6px 16px rgba(8,145,178,0.32);
+  color: var(--navy); font-weight: 800; font-size: 19px; font-style: italic;
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto 14px; letter-spacing: 0.5px;
 }
@@ -215,8 +215,8 @@ body::before {
 }
 .marker-layer { position: absolute; inset: 0; pointer-events: none; }
 .marker-dot {
-  position: absolute; width: 28px; height: 28px; margin-left: -14px; margin-top: -14px;
-  border: 4px solid var(--red); border-radius: 50%;
+  position: absolute; width: 70px; height: 70px; margin-left: -35px; margin-top: -35px;
+  border: 7px solid var(--red); border-radius: 50%;
   background: rgba(224,51,47,0.18);
   animation: markerPulse 0.5s ease-out forwards;
 }
@@ -267,7 +267,7 @@ body::before {
   border: 4px solid #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .record-dot {
-  width: 30px; height: 30px; border-radius: 50%; background: var(--red);
+  width: 60px; height: 60px; border-radius: 50%; background: var(--red);
   transition: border-radius 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .record-btn.recording .record-dot { border-radius: 10px; width: 26px; height: 26px; }
@@ -321,7 +321,30 @@ body::before {
 .entry-detail-row a { color: var(--primary); font-weight: 600; }
 .entry-card.open .entry-details { display: block; }
 .entry-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.entry-photos img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 2px solid var(--red); }
+.entry-photos img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 2px solid var(--red); cursor: pointer; }
+
+.entry-video-wrap { margin-top: 10px; }
+.entry-video-wrap video { width: 100%; border-radius: 10px; background: #000; display: block; max-height: 360px; }
+.entry-video-actions { display: flex; gap: 8px; margin-top: 8px; }
+.entry-download-btn {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: #fff;
+  color: var(--text); font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+}
+.entry-download-btn:hover { background: var(--primary-light); }
+.entry-download-btn .icon { width: 14px; height: 14px; }
+.entry-download-btn:disabled { opacity: 0.6; cursor: default; }
+
+.lightbox {
+  display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.9);
+  align-items: center; justify-content: center; padding: 24px;
+}
+.lightbox.show { display: flex; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; object-fit: contain; }
+.lightbox-close {
+  position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px; z-index: 5;
+  width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
 .empty-state { text-align: center; color: var(--text-mute); padding: 60px 20px; font-size: 14px; }
 
 /* ---------- fleet manager dashboard (desktop-first) ---------- */

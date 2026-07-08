@@ -74,11 +74,12 @@
           <div id="manager-mode-field" style="display:none;">
             <label class="field-label">Fleet setup</label>
             <div class="role-toggle">
-              <button class="role-btn manager-mode-btn active" data-mode="create" type="button">Create a code</button>
-              <button class="role-btn manager-mode-btn" data-mode="join" type="button">I already have a code</button>
+              <button class="role-btn manager-mode-btn active" data-mode="create" type="button">Start a new fleet</button>
+              <button class="role-btn manager-mode-btn" data-mode="join" type="button">Join an existing fleet</button>
             </div>
-            <p class="field-hint" id="manager-create-hint">A unique fleet code is created for you automatically — you'll give this to your drivers, and to any other managers on your team, so everyone links to the same dashboard.</p>
+            <p class="field-hint" id="manager-create-hint">Pick this if you're the first/only manager setting this up. A brand-new, unique fleet code is generated automatically — give it to your drivers so they link to your dashboard.</p>
             <div id="manager-join-code-field" style="display:none;">
+              <p class="field-hint">Only pick this if <strong>another manager already ran "Start a new fleet"</strong> and gave you their code — this links your account to their existing dashboard instead of creating a separate one.</p>
               <label class="field-label">Existing fleet code</label>
               <input class="field" type="text" id="signup-manager-fleet-code" placeholder="Ask another manager on your team" autocomplete="off" />
             </div>
@@ -360,9 +361,7 @@
         <div class="dash-filters">
           <div class="filter-group" id="filter-time">
             <button class="chip active" data-range="today">Today</button>
-            <button class="chip" data-range="yesterday">Yesterday</button>
             <button class="chip" data-range="7d">Last 7 Days</button>
-            <button class="chip" data-range="all">All Time</button>
             <button class="chip" data-range="date" id="chip-pick-date">Pick Date</button>
           </div>
           <input type="date" id="filter-date-input" class="date-picker-input" />

@@ -1192,7 +1192,6 @@ function inRange(ts, range) {
   const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
   const todayStart = startOfDay(now);
   if (range === 'today') return ts >= todayStart;
-  if (range === 'yesterday') return ts >= todayStart - 86400000 && ts < todayStart;
   if (range === '7d') return ts >= todayStart - 6 * 86400000;
   if (range === 'date' && state.dashCustomDate) {
     const picked = new Date(state.dashCustomDate + 'T00:00:00').getTime();
@@ -1248,7 +1247,8 @@ async function renderDashboard() {
     state.dashUnit = '';
     state.dashType = '';
     state.dashOnlyDefects = false;
-    $$('#filter-time .chip').forEach((c) => c.classList.toggle('active', c.dataset.range === 'all'));
+    $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
+    $('#chip-pick-date').textContent = 'Pick Date';
     $('#filter-driver-input').value = '';
     $('#filter-unit-input').value = '';
     $('#filter-type').value = '';

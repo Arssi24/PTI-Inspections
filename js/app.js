@@ -205,14 +205,11 @@ async function init() {
   $('#record-video').parentElement.querySelector('#marker-layer').addEventListener('click', onTapFlag);
   $('.record-stage').addEventListener('click', onTapFlag);
 
-  $$('#filter-time .chip').forEach((chip) => {
+  // Only the plain range chips (data-range attribute) use this click-to-select pattern.
+  // The date chip is its own thing below — a real <input type="date"> sits invisibly on
+  // top of it, so it opens the native picker from a genuine tap, not a JS-triggered one.
+  $$('#filter-time .chip[data-range]').forEach((chip) => {
     chip.addEventListener('click', () => {
-      if (chip.dataset.range === 'date') {
-        const dateInput = $('#filter-date-input');
-        if (dateInput.showPicker) dateInput.showPicker();
-        else dateInput.click();
-        return;
-      }
       $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       state.dashRange = chip.dataset.range;
@@ -224,7 +221,7 @@ async function init() {
     state.dashRange = 'date';
     state.dashCustomDate = e.target.value;
     $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
-    $('#chip-pick-date').classList.add('active');
+    $('#date-chip-wrap').classList.add('active');
     $('#chip-pick-date').textContent = new Date(e.target.value + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     renderDashboard();
   });
@@ -543,6 +540,8 @@ function scanLoop() {
   const video = $('#scan-video');
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let lastRejected = null;
+  let lastRejectedAt = 0;
 
   function tick() {
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
@@ -552,8 +551,16 @@ function scanLoop() {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = window.jsQR ? jsQR(imageData.data, imageData.width, imageData.height) : null;
       if (code && code.data) {
-        onUnitScanned(code.data.trim());
-        return;
+        const raw = code.data.trim();
+        // Skip re-showing the same rejection every single frame while a bad sticker
+        // is still in view — only re-check it once the cooldown passes.
+        const now = Date.now();
+        if (raw !== lastRejected || now - lastRejectedAt > 2000) {
+          const accepted = onUnitScanned(raw);
+          if (accepted) return;
+          lastRejected = raw;
+          lastRejectedAt = now;
+        }
       }
     }
     state.scanLoopHandle = requestAnimationFrame(tick);
@@ -572,23 +579,29 @@ function stopScanLoop() {
 
 function onManualUnitSubmit() {
   const val = $('#manual-unit').value.trim();
-  const errEl = $('#manual-unit-error');
-  errEl.style.display = 'none';
   if (!val) return;
-  const match = (state.availableUnits || []).find((u) => u.toLowerCase() === val.toLowerCase());
-  if (!match) {
-    errEl.textContent = 'Not a registered truck/trailer — pick one from the list, or check with your fleet manager.';
-    errEl.style.display = 'block';
-    return;
-  }
-  onUnitScanned(match);
+  onUnitScanned(val);
 }
 
-function onUnitScanned(unitCode) {
+// Single gatekeeper for BOTH the camera scan and manual-entry paths, so a code/number can
+// only ever start a recording if it's an actual registered unit for this fleet — never an
+// arbitrary QR code or typo. Returns true if accepted (caller should stop scanning), false
+// if rejected (caller should keep scanning / let the driver try again).
+function onUnitScanned(rawCode) {
+  const errEl = $('#manual-unit-error');
+  const unitCode = (rawCode || '').trim();
+  const match = (state.availableUnits || []).find((u) => u.toLowerCase() === unitCode.toLowerCase());
+  if (!match) {
+    errEl.textContent = `"${unitCode}" isn't a registered truck/trailer for your fleet — check the sticker, or ask your fleet manager.`;
+    errEl.style.display = 'block';
+    return false;
+  }
+  errEl.style.display = 'none';
   stopScanLoop();
-  state.currentUnit = unitCode;
+  state.currentUnit = match;
   $('#manual-unit').value = '';
   enterRecordScreen();
+  return true;
 }
 
 /* ---------------- recording screen ---------------- */
@@ -784,6 +797,7 @@ function onTapFlag(e) {
   const btn = $('#btn-record-toggle');
   if (!btn.classList.contains('recording')) return;
   if (e.target.closest('.record-bottom')) return; // dead zone around the controls — no accidental flags
+  if (e.target.closest('.record-topbar')) return; // same for the close button/badges up top
 
   const stage = document.querySelector('.record-stage');
   const rect = stage.getBoundingClientRect();
@@ -1071,6 +1085,8 @@ async function renderUnitsList() {
     renderQrInto(row.querySelector('.unit-qr-thumb'), u.unit, 56);
     row.querySelector('.unit-download-btn').addEventListener('click', () => downloadUnitQr(u.unit));
     row.querySelector('.unit-remove-btn').addEventListener('click', async () => {
+      const kindLabel = u.kind === 'truck' ? 'truck' : 'trailer';
+      if (!confirm(`Delete the QR code for ${kindLabel} ${u.unit}? Drivers won't be able to scan it anymore.`)) return;
       await sbDeleteUnit(u.id);
       renderUnitsList();
     });
@@ -1208,9 +1224,10 @@ async function renderDashboard() {
   const registeredUnits = (await sbGetUnits(state.fleetCode)).map((u) => u.unit);
 
   const existingDrivers = Array.from(new Set(all.map((r) => r.driver_name))).sort();
-  const existingUnits = Array.from(new Set([...registeredUnits, ...all.map((r) => r.unit)])).sort();
   state.dashKnownDrivers = existingDrivers;
-  state.dashKnownUnits = existingUnits;
+  // Only currently-registered units, not every unit name ever seen in past inspections —
+  // otherwise deleted trucks/trailers keep cluttering this list forever.
+  state.dashKnownUnits = Array.from(new Set(registeredUnits)).sort();
 
   const filtered = all.filter((r) =>
     inRange(new Date(r.created_at).getTime(), state.dashRange) &&

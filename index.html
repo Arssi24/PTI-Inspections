@@ -31,12 +31,12 @@
         <p class="demo-note">Real accounts, backed by Supabase. Fleet managers get a fleet code on sign-up — share it with your drivers so their submissions link to your dashboard.</p>
 
         <div class="auth-tabs">
-          <button class="auth-tab" data-tab="login" type="button">Log In</button>
-          <button class="auth-tab active" data-tab="signup" type="button">Create Account</button>
+          <button class="auth-tab active" data-tab="login" type="button">Log In</button>
+          <button class="auth-tab" data-tab="signup" type="button">Create Account</button>
         </div>
 
         <!-- Sign up -->
-        <div id="tab-signup">
+        <div id="tab-signup" style="display:none;">
           <label class="field-label">Full name</label>
           <input class="field" type="text" id="signup-name" placeholder="e.g. Mike Reyes" autocomplete="name" />
           <label class="field-label">Email</label>
@@ -90,7 +90,7 @@
         </div>
 
         <!-- Log in -->
-        <div id="tab-login" style="display:none;">
+        <div id="tab-login">
           <label class="field-label">Email</label>
           <input class="field" type="email" id="login-email" placeholder="you@company.com" autocomplete="email" />
           <label class="field-label">Password</label>
@@ -371,9 +371,11 @@
           <div class="filter-group" id="filter-time">
             <button class="chip active" data-range="today">Today</button>
             <button class="chip" data-range="7d">Last 7 Days</button>
-            <button class="chip" data-range="date" id="chip-pick-date">Pick Date</button>
+            <div class="chip date-chip-wrap" id="date-chip-wrap">
+              <span id="chip-pick-date">Pick Date</span>
+              <input type="date" id="filter-date-input" class="date-chip-overlay" />
+            </div>
           </div>
-          <input type="date" id="filter-date-input" class="date-picker-input" />
           <div class="combo" id="combo-unit">
             <input type="text" class="field field-inline combo-input" id="filter-unit-input" placeholder="All Trucks &amp; Trailers" autocomplete="off" />
             <div class="combo-list" id="filter-unit-list"></div>

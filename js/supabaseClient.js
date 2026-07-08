@@ -26,11 +26,13 @@ function requireSb() {
 
 /* ---------------- auth ---------------- */
 
-async function sbSignUp(email, password, metadata) {
+async function sbSignUp(email, password, metadata, emailRedirectTo) {
   // metadata (name/phone/role/fleet_code) lands in auth.users.raw_user_meta_data, which
   // the handle_new_user() DB trigger reads to create the profile (and fleet, if manager)
   // server-side — see supabase/schema.sql. The client never inserts these rows directly.
-  return requireSb().auth.signUp({ email, password, options: { data: metadata } });
+  // emailRedirectTo must also be added under Authentication -> URL Configuration ->
+  // Redirect URLs in the Supabase dashboard, or Supabase will silently ignore it.
+  return requireSb().auth.signUp({ email, password, options: { data: metadata, emailRedirectTo } });
 }
 
 async function sbSignIn(email, password) {
@@ -134,6 +136,38 @@ async function sbUploadBlob(path, blob) {
   });
   if (error) throw error;
   return path;
+}
+
+// The vendored supabase-js storage client has no upload-progress callback, so real
+// byte-level progress (for the uploading screen) needs a direct XHR call to the same
+// REST endpoint the SDK uses under the hood.
+async function sbUploadBlobWithProgress(path, blob, onProgress) {
+  const { data: sessionData } = await requireSb().auth.getSession();
+  const token = sessionData.session ? sessionData.session.access_token : null;
+  if (!token) throw new Error('Your session expired — log back in and try again.');
+
+  const url = `${window.SUPABASE_CONFIG.url}/storage/v1/object/inspection-media/${path}`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('apikey', window.SUPABASE_CONFIG.anonKey);
+    xhr.setRequestHeader('Content-Type', blob.type || 'application/octet-stream');
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (onProgress) onProgress(blob.size);
+        resolve(path);
+      } else {
+        reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText || 'unknown error'}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload — check your connection and try again.'));
+    xhr.send(blob);
+  });
 }
 
 async function sbUploadDataUrl(path, dataUrl) {

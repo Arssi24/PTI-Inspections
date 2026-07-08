@@ -198,8 +198,17 @@ async function init() {
 
   $('#btn-manual-submit').addEventListener('click', onManualUnitSubmit);
   $('#btn-record-toggle').addEventListener('click', onRecordToggle);
+  $('#btn-torch-toggle').addEventListener('click', onToggleTorch);
   $('#btn-retake').addEventListener('click', onRetake);
   $('#btn-save-upload').addEventListener('click', onSaveUpload);
+  $('#btn-upload-done').addEventListener('click', () => showScreen('screen-home'));
+  $('#btn-upload-retry').addEventListener('click', () => { showUploadScreen(); runUpload(); });
+  $('#btn-upload-discard').addEventListener('click', () => {
+    if (!confirm('Discard this recording? This cannot be undone.')) return;
+    pendingUpload = null;
+    window.onbeforeunload = null;
+    showScreen('screen-home');
+  });
 
   $('#record-video').parentElement.querySelector('#marker-layer').addEventListener('click', onTapFlag);
   $('.record-stage').addEventListener('click', onTapFlag);
@@ -229,6 +238,17 @@ async function init() {
 
   document.addEventListener('click', closeAllDriverMenus);
 
+  $$('.password-toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = btn.previousElementSibling;
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.querySelector('.eye-on').style.display = showing ? 'block' : 'none';
+      btn.querySelector('.eye-off').style.display = showing ? 'none' : 'block';
+      btn.title = showing ? 'Show password' : 'Hide password';
+    });
+  });
+
   if (isRecoveryLink) return;
 
   let loggedIn = false;
@@ -252,6 +272,7 @@ async function onSignup() {
   const email = $('#signup-email').value.trim().toLowerCase();
   const phone = $('#signup-phone').value.trim();
   const password = $('#signup-password').value;
+  const passwordConfirm = $('#signup-password-confirm').value;
   const role = state.signupRole;
   const errEl = $('#signup-error');
   errEl.style.display = 'none';
@@ -262,6 +283,10 @@ async function onSignup() {
   }
   if (password.length < 6) {
     showAuthError(errEl, 'Password must be at least 6 characters.');
+    return;
+  }
+  if (password !== passwordConfirm) {
+    showAuthError(errEl, 'Passwords don\'t match — check both fields.');
     return;
   }
 
@@ -312,7 +337,7 @@ async function onSignup() {
     // DB trigger — see supabase/schema.sql — from this metadata. That's what lets signup
     // work correctly whether or not "Confirm email" is turned on: the trigger runs inside
     // the same transaction as the auth.users insert, before any client session exists.
-    const { data, error } = await sbSignUp(email, password, { name, phone, role, fleet_code: fleetCode });
+    const { data, error } = await sbSignUp(email, password, { name, phone, role, fleet_code: fleetCode }, currentSiteUrl());
     if (error) {
       showAuthError(errEl, error.message);
       return;
@@ -365,10 +390,15 @@ async function onForgotPasswordSubmit() {
 
 async function onSetNewPasswordSubmit() {
   const password = $('#new-password').value;
+  const passwordConfirm = $('#new-password-confirm').value;
   const errEl = $('#new-password-error');
   errEl.style.display = 'none';
   if (password.length < 6) {
     showAuthError(errEl, 'Password must be at least 6 characters.');
+    return;
+  }
+  if (password !== passwordConfirm) {
+    showAuthError(errEl, 'Passwords don\'t match — check both fields.');
     return;
   }
   const btn = $('#btn-set-new-password');
@@ -537,13 +567,16 @@ async function enterRecordScreen() {
   $('#camera-warning').style.display = 'none';
   $('#defect-count-wrap').style.visibility = 'hidden';
   $('#defect-count').textContent = '0';
-  $('#tap-hint').style.display = 'block';
   $('#marker-layer').innerHTML = '';
   state.defects = [];
   state.recordedChunks = [];
   state.elapsedSec = 0;
   state.currentLocation = null;
   captureLocation();
+
+  $('#btn-torch-toggle').style.display = 'none';
+  $('#btn-torch-toggle').classList.remove('active');
+  state.torchOn = false;
 
   const video = $('#record-video');
   $('#camera-warning').style.display = 'none';
@@ -554,11 +587,32 @@ async function enterRecordScreen() {
     });
     video.srcObject = state.stream;
     await video.play();
+    setUpTorchIfAvailable();
   } catch (err) {
     console.warn('Camera/mic permission denied:', err);
-    $('#tap-hint').style.display = 'none';
     $('#camera-warning').style.display = 'block';
     $('#btn-record-toggle').disabled = true;
+  }
+}
+
+function setUpTorchIfAvailable() {
+  const track = state.stream && state.stream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : null;
+  if (caps && caps.torch) {
+    $('#btn-torch-toggle').style.display = 'flex';
+  }
+}
+
+async function onToggleTorch() {
+  const track = state.stream && state.stream.getVideoTracks()[0];
+  if (!track) return;
+  state.torchOn = !state.torchOn;
+  try {
+    await track.applyConstraints({ advanced: [{ torch: state.torchOn }] });
+    $('#btn-torch-toggle').classList.toggle('active', state.torchOn);
+  } catch (err) {
+    console.warn('Torch toggle failed:', err);
+    state.torchOn = false;
   }
 }
 
@@ -641,7 +695,6 @@ function stopRecording() {
   }
 
   $('#controls-live').style.display = 'none';
-  $('#tap-hint').style.display = 'none';
   $('#controls-stopped').style.display = 'block';
 
   const min = MIN_SECONDS[state.currentType];
@@ -660,12 +713,14 @@ function stopCameraStream() {
 }
 
 function onRetake() {
+  if (!confirm('Delete this recording and start over? This cannot be undone.')) return;
   enterRecordScreen();
 }
 
 function onTapFlag(e) {
   const btn = $('#btn-record-toggle');
   if (!btn.classList.contains('recording')) return;
+  if (e.target.closest('.record-bottom')) return; // dead zone around the controls — no accidental flags
 
   const stage = document.querySelector('.record-stage');
   const rect = stage.getBoundingClientRect();
@@ -679,7 +734,7 @@ function onTapFlag(e) {
   dot.style.left = x + 'px';
   dot.style.top = y + 'px';
   $('#marker-layer').appendChild(dot);
-  setTimeout(() => dot.remove(), 4000);
+  setTimeout(() => dot.remove(), 550);
 
   capturePhotoWithMarker(xPct, yPct);
 }
@@ -721,76 +776,135 @@ function newId() {
   return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10));
 }
 
-async function onSaveUpload() {
-  const type = state.currentType;
-  const unit = state.currentUnit;
-  const driverName = state.driverName;
-  const driverEmail = state.driverEmail;
-  const driverPhone = state.driverPhone;
-  const fleetCode = state.fleetCode;
-  const location = state.currentLocation;
-  const durationSec = Math.round(state.finalDurationSec);
-  const defectsRaw = state.defects;
+let pendingUpload = null;
+let uploadStartTime = null;
+let uploadTimerHandle = null;
+
+function onSaveUpload() {
   const mimeType = state.recorder && state.recorder.mimeType ? state.recorder.mimeType : 'video/webm';
-  const chunks = state.recordedChunks.slice();
-  const id = newId();
+  const videoExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  pendingUpload = {
+    id: newId(),
+    type: state.currentType,
+    unit: state.currentUnit,
+    driverName: state.driverName,
+    driverEmail: state.driverEmail,
+    driverPhone: state.driverPhone,
+    fleetCode: state.fleetCode,
+    location: state.currentLocation,
+    durationSec: Math.round(state.finalDurationSec),
+    defectsRaw: state.defects,
+    videoBlob: new Blob(state.recordedChunks.slice(), { type: mimeType }),
+    videoExt,
+  };
+  showUploadScreen();
+  runUpload();
+}
 
-  showToast();
-  showScreen('screen-home');
+function formatElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
 
+function setUploadProgress(fraction) {
+  const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)));
+  $('#upload-progress-fill').style.width = pct + '%';
+  $('#upload-percent').textContent = pct + '%';
+}
+
+function startUploadTimer() {
+  uploadStartTime = Date.now();
+  clearInterval(uploadTimerHandle);
+  $('#upload-elapsed').textContent = '0:00';
+  uploadTimerHandle = setInterval(() => {
+    $('#upload-elapsed').textContent = formatElapsed(Date.now() - uploadStartTime);
+  }, 250);
+}
+
+function showUploadScreen() {
+  showScreen('screen-uploading');
+  $('#upload-icon').className = 'upload-icon';
+  $('#upload-icon').innerHTML = '<svg class="icon upload-spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-9-9"/></svg>';
+  $('#upload-title').textContent = 'Uploading…';
+  $('#upload-sub').textContent = "Keep this screen open until it finishes — closing early can lose the upload.";
+  $('#upload-progress-wrap').style.display = 'block';
+  $('#upload-error-actions').style.display = 'none';
+  $('#btn-upload-done').style.display = 'none';
+  setUploadProgress(0);
+  startUploadTimer();
+  window.onbeforeunload = () => 'An upload is still in progress. Leave anyway?';
+}
+
+async function runUpload() {
+  const p = pendingUpload;
+  if (!p) return;
   try {
-    const videoBlob = new Blob(chunks, { type: mimeType });
-    const videoExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
-    const videoPath = `${fleetCode}/${id}/video.${videoExt}`;
-    await sbUploadBlob(videoPath, videoBlob);
+    const photoBlobs = [];
+    for (const d of p.defectsRaw) {
+      const res = await fetch(d.photo);
+      photoBlobs.push(await res.blob());
+    }
+    const totalBytes = p.videoBlob.size + photoBlobs.reduce((s, b) => s + b.size, 0) || 1;
+    let uploadedBytes = 0;
+
+    const videoPath = `${p.fleetCode}/${p.type}/${p.id}/video.${p.videoExt}`;
+    await sbUploadBlobWithProgress(videoPath, p.videoBlob, (loaded) => {
+      setUploadProgress((uploadedBytes + loaded) / totalBytes);
+    });
+    uploadedBytes += p.videoBlob.size;
+    setUploadProgress(uploadedBytes / totalBytes);
 
     const defects = [];
-    for (let i = 0; i < defectsRaw.length; i++) {
-      const d = defectsRaw[i];
-      const photoPath = `${fleetCode}/${id}/defect-${i}.jpg`;
-      await sbUploadDataUrl(photoPath, d.photo);
+    for (let i = 0; i < p.defectsRaw.length; i++) {
+      const d = p.defectsRaw[i];
+      const blob = photoBlobs[i];
+      const photoPath = `${p.fleetCode}/${p.type}/${p.id}/defect-${i}.jpg`;
+      await sbUploadBlobWithProgress(photoPath, blob, (loaded) => {
+        setUploadProgress((uploadedBytes + loaded) / totalBytes);
+      });
+      uploadedBytes += blob.size;
+      setUploadProgress(uploadedBytes / totalBytes);
       defects.push({ id: d.id, t: d.t, x: d.x, y: d.y, photo_path: photoPath });
     }
 
     const { error } = await sbInsertInspection({
-      id,
-      type,
-      unit,
+      id: p.id,
+      type: p.type,
+      unit: p.unit,
       driver_id: state.userId,
-      driver_name: driverName,
-      driver_email: driverEmail,
-      driver_phone: driverPhone,
-      fleet_code: fleetCode,
-      duration_sec: durationSec,
+      driver_name: p.driverName,
+      driver_email: p.driverEmail,
+      driver_phone: p.driverPhone,
+      fleet_code: p.fleetCode,
+      duration_sec: p.durationSec,
       defects,
       video_path: videoPath,
-      lat: location ? location.lat : null,
-      lng: location ? location.lng : null,
-      location_accuracy_m: location ? location.accuracyM : null,
+      lat: p.location ? p.location.lat : null,
+      lng: p.location ? p.location.lng : null,
+      location_accuracy_m: p.location ? p.location.accuracyM : null,
     });
     if (error) throw error;
+
+    clearInterval(uploadTimerHandle);
+    window.onbeforeunload = null;
+    pendingUpload = null;
+    $('#upload-icon').className = 'upload-icon success';
+    $('#upload-icon').innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    $('#upload-title').textContent = 'Upload Complete';
+    $('#upload-sub').textContent = 'Your inspection was saved successfully.';
+    $('#upload-progress-wrap').style.display = 'none';
+    $('#btn-upload-done').style.display = 'block';
   } catch (err) {
     console.error('Upload failed', err);
-  } finally {
-    finishToast();
+    clearInterval(uploadTimerHandle);
+    window.onbeforeunload = null;
+    $('#upload-icon').className = 'upload-icon error';
+    $('#upload-icon').innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+    $('#upload-title').textContent = 'Upload Failed';
+    $('#upload-sub').textContent = "Your recording is still here — don't close the app. Check your connection and try again.";
+    $('#upload-progress-wrap').style.display = 'none';
+    $('#upload-error-actions').style.display = 'block';
   }
-}
-
-let toastTimer = null;
-function showToast() {
-  const toast = $('#upload-toast');
-  toast.classList.remove('done');
-  toast.querySelector('.toast-title').textContent = 'Uploading…';
-  toast.querySelector('.toast-sub').textContent = "Safe to close the app — it'll keep going in the background.";
-  toast.classList.add('show');
-}
-function finishToast() {
-  const toast = $('#upload-toast');
-  toast.classList.add('done');
-  toast.querySelector('.toast-title').textContent = 'Uploaded ✓';
-  toast.querySelector('.toast-sub').textContent = 'Synced to fleet dashboard.';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
 }
 
 /* ---------------- driver history ---------------- */

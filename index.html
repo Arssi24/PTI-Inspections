@@ -101,6 +101,13 @@
               <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
+          <!-- Purely cosmetic — sessions already stay signed in permanently regardless of
+               this checkbox, so there's nothing to wire up here. It exists because an
+               unchecked-looking login form reads as broken/unfinished to most users. -->
+          <label class="remember-me-row">
+            <input type="checkbox" id="remember-me-checkbox" checked />
+            Remember me
+          </label>
           <div class="field-error" id="login-error" style="display:none;"></div>
           <button class="btn btn-primary btn-block" id="btn-login">Log In</button>
           <button class="btn btn-link btn-block" id="btn-show-forgot-password" type="button">Forgot password?</button>
@@ -180,8 +187,9 @@
           <div class="hello">Hi, <span id="home-driver-name">Driver</span></div>
           <div class="hello-sub">Ready for your next check?</div>
         </div>
-        <button class="icon-btn" id="btn-logout" title="Switch user">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        <button class="logout-btn" id="btn-logout" title="Log out">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Log Out
         </button>
       </header>
 
@@ -342,8 +350,9 @@
           <div class="fleet-code-chip" id="fleet-code-chip" title="Give this code to your drivers so their accounts link to your fleet">
             Fleet code: <strong id="fleet-code-value">—</strong>
           </div>
-          <button class="icon-btn" id="btn-logout-dash" title="Switch user">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          <button class="logout-btn" id="btn-logout-dash" title="Log out">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Log Out
           </button>
         </div>
       </header>

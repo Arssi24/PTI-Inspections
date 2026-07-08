@@ -103,6 +103,12 @@ body::before {
 }
 .auth-tab.active { color: var(--navy); border-bottom-color: var(--primary); }
 
+.remember-me-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px;
+  font-size: 13.5px; font-weight: 600; color: var(--text-mute); cursor: pointer; user-select: none;
+}
+.remember-me-row input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+
 .field-error {
   color: var(--red); font-size: 12.5px; font-weight: 600; margin: 10px 0 0;
 }
@@ -163,6 +169,14 @@ body::before {
   display: flex; align-items: center; justify-content: center;
 }
 .icon-btn.light { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); color: #fff; }
+
+.logout-btn {
+  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--border); background: #fff;
+  font-size: 13px; font-weight: 700; color: var(--text-mute); cursor: pointer; white-space: nowrap;
+}
+.logout-btn:hover { background: #fdf3f2; border-color: #f3c9c4; color: var(--red); }
+.logout-btn .icon { width: 16px; height: 16px; }
 .icon-btn.light.active { background: #f5b93f; border-color: #f5b93f; color: #1a1d33; }
 
 /* ---------- home mode grid ---------- */
@@ -471,7 +485,7 @@ body::before {
 .combo-option.combo-empty:hover { background: none; }
 
 @media (max-width: 720px) {
-  .dashboard { padding: 18px 14px 50px; }
+  .dashboard { padding: max(18px, calc(env(safe-area-inset-top) + 16px)) 14px 50px; }
   .dash-header { flex-wrap: wrap; }
   .dash-header-right { width: 100%; justify-content: space-between; }
 }

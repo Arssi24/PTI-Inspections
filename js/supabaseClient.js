@@ -127,7 +127,18 @@ async function sbInsertInspection(record) {
   return requireSb().from('inspections').insert(record);
 }
 
+async function sbDeleteInspection(id) {
+  return requireSb().from('inspections').delete().eq('id', id);
+}
+
 /* ---------------- storage ---------------- */
+
+async function sbDeleteStorageObjects(paths) {
+  const clean = (paths || []).filter(Boolean);
+  if (clean.length === 0) return;
+  const { error } = await requireSb().storage.from('inspection-media').remove(clean);
+  if (error) throw error;
+}
 
 async function sbUploadBlob(path, blob) {
   const { error } = await requireSb().storage.from('inspection-media').upload(path, blob, {

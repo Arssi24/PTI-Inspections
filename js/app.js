@@ -162,15 +162,7 @@ async function init() {
   });
 
   $$('.dash-tab').forEach((tab) => {
-    tab.addEventListener('click', () => {
-      $$('.dash-tab').forEach((t) => t.classList.remove('active'));
-      tab.classList.add('active');
-      $$('.dash-panel').forEach((p) => p.classList.remove('active'));
-      $(`#panel-${tab.dataset.panel}`).classList.add('active');
-      if (tab.dataset.panel === 'units') renderUnitsList();
-      if (tab.dataset.panel === 'inspections') renderDashboard();
-      if (tab.dataset.panel === 'drivers') renderDriversList();
-    });
+    tab.addEventListener('click', () => switchDashTab(tab.dataset.panel));
   });
 
   $('#btn-add-unit').addEventListener('click', onAddUnit);
@@ -215,11 +207,26 @@ async function init() {
 
   $$('#filter-time .chip').forEach((chip) => {
     chip.addEventListener('click', () => {
+      if (chip.dataset.range === 'date') {
+        const dateInput = $('#filter-date-input');
+        if (dateInput.showPicker) dateInput.showPicker();
+        else dateInput.click();
+        return;
+      }
       $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       state.dashRange = chip.dataset.range;
       renderDashboard();
     });
+  });
+  $('#filter-date-input').addEventListener('change', (e) => {
+    if (!e.target.value) return;
+    state.dashRange = 'date';
+    state.dashCustomDate = e.target.value;
+    $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
+    $('#chip-pick-date').classList.add('active');
+    $('#chip-pick-date').textContent = new Date(e.target.value + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    renderDashboard();
   });
   $('#filter-type').addEventListener('change', (e) => { state.dashType = e.target.value; renderDashboard(); });
 
@@ -1172,6 +1179,14 @@ function renderDriverRowEdit(row, d) {
 
 /* ---------------- fleet manager dashboard ---------------- */
 
+function switchDashTab(panel) {
+  $$('.dash-tab').forEach((t) => t.classList.toggle('active', t.dataset.panel === panel));
+  $$('.dash-panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${panel}`));
+  if (panel === 'units') renderUnitsList();
+  if (panel === 'inspections') renderDashboard();
+  if (panel === 'drivers') renderDriversList();
+}
+
 function inRange(ts, range) {
   const now = new Date();
   const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
@@ -1179,6 +1194,10 @@ function inRange(ts, range) {
   if (range === 'today') return ts >= todayStart;
   if (range === 'yesterday') return ts >= todayStart - 86400000 && ts < todayStart;
   if (range === '7d') return ts >= todayStart - 6 * 86400000;
+  if (range === 'date' && state.dashCustomDate) {
+    const picked = new Date(state.dashCustomDate + 'T00:00:00').getTime();
+    return ts >= picked && ts < picked + 86400000;
+  }
   return true;
 }
 
@@ -1198,16 +1217,43 @@ async function renderDashboard() {
     inRange(new Date(r.created_at).getTime(), state.dashRange) &&
     (!state.dashDriver || r.driver_name === state.dashDriver) &&
     (!state.dashType || r.type === state.dashType) &&
-    (!state.dashUnit || r.unit === state.dashUnit)
+    (!state.dashUnit || r.unit === state.dashUnit) &&
+    (!state.dashOnlyDefects || (r.defects && r.defects.length > 0))
   );
 
-  const withDefects = filtered.filter((r) => r.defects && r.defects.length > 0).length;
+  const withDefects = all.filter((r) =>
+    inRange(new Date(r.created_at).getTime(), state.dashRange) &&
+    (!state.dashDriver || r.driver_name === state.dashDriver) &&
+    (!state.dashType || r.type === state.dashType) &&
+    (!state.dashUnit || r.unit === state.dashUnit) &&
+    r.defects && r.defects.length > 0
+  ).length;
   $('#dash-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-num">${filtered.length}</div><div class="stat-label">Inspections in view</div></div>
-    <div class="stat-card"><div class="stat-num">${withDefects}</div><div class="stat-label">With flagged defects</div></div>
-    <div class="stat-card"><div class="stat-num">${existingDrivers.length}</div><div class="stat-label">Active drivers</div></div>
-    <div class="stat-card"><div class="stat-num">${all.length}</div><div class="stat-label">Total on record</div></div>
+    <button class="stat-card" type="button" data-stat="inspections"><div class="stat-num">${filtered.length}</div><div class="stat-label">Inspections in view</div></button>
+    <button class="stat-card ${state.dashOnlyDefects ? 'active' : ''}" type="button" data-stat="defects"><div class="stat-num">${withDefects}</div><div class="stat-label">With flagged defects</div></button>
+    <button class="stat-card" type="button" data-stat="drivers"><div class="stat-num">${existingDrivers.length}</div><div class="stat-label">Active drivers</div></button>
+    <button class="stat-card" type="button" data-stat="total"><div class="stat-num">${all.length}</div><div class="stat-label">Total on record</div></button>
   `;
+  $('#dash-stats [data-stat="inspections"]').addEventListener('click', () => {
+    $('#dash-list').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#dash-stats [data-stat="defects"]').addEventListener('click', () => {
+    state.dashOnlyDefects = !state.dashOnlyDefects;
+    renderDashboard();
+  });
+  $('#dash-stats [data-stat="drivers"]').addEventListener('click', () => switchDashTab('drivers'));
+  $('#dash-stats [data-stat="total"]').addEventListener('click', () => {
+    state.dashRange = 'all';
+    state.dashDriver = '';
+    state.dashUnit = '';
+    state.dashType = '';
+    state.dashOnlyDefects = false;
+    $$('#filter-time .chip').forEach((c) => c.classList.toggle('active', c.dataset.range === 'all'));
+    $('#filter-driver-input').value = '';
+    $('#filter-unit-input').value = '';
+    $('#filter-type').value = '';
+    renderDashboard();
+  });
 
   list.innerHTML = '';
   if (filtered.length === 0) {
@@ -1271,6 +1317,12 @@ async function renderEntryCard(r, showDriver) {
       <div class="entry-detail-row">Location: ${locationHtml}</div>
       ${videoHtml}
       ${photosHtml}
+      ${state.role === 'manager' ? `
+        <button class="entry-delete-btn" type="button">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Delete this inspection
+        </button>
+      ` : ''}
     </div>
   `;
   card.addEventListener('click', () => card.classList.toggle('open'));
@@ -1280,6 +1332,24 @@ async function renderEntryCard(r, showDriver) {
       openLightbox(img.dataset.full);
     });
   });
+  const deleteBtn = card.querySelector('.entry-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete this ${r.type} inspection for ${unit}? This permanently removes the video and photos too — it can't be undone.`)) return;
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = 'Deleting…';
+      try {
+        const paths = [r.video_path, ...(r.defects || []).map((d) => d.photo_path)].filter(Boolean);
+        await sbDeleteStorageObjects(paths);
+        await sbDeleteInspection(r.id);
+        renderDashboard();
+      } catch (err) {
+        alert('Could not delete — try again: ' + (err.message || err));
+        deleteBtn.disabled = false;
+      }
+    });
+  }
   const downloadBtn = card.querySelector('.entry-download-btn');
   if (downloadBtn) {
     downloadBtn.addEventListener('click', (e) => {

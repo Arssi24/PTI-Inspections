@@ -70,6 +70,17 @@ as $$
   select fleet_code from public.profiles where id = auth.uid()
 $$;
 
+-- Helper: is the current user a fleet manager? Used to restrict destructive actions
+-- (like deleting an inspection) to managers, not any driver in the fleet.
+create or replace function public.current_is_manager()
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select coalesce((select role from public.profiles where id = auth.uid()) = 'manager', false)
+$$;
+
 drop policy if exists "Managers can read their fleet's driver profiles" on public.profiles;
 create policy "Managers can read their fleet's driver profiles"
   on public.profiles for select
@@ -164,7 +175,7 @@ create table if not exists public.units (
   id uuid primary key default gen_random_uuid(),
   unit text not null,
   kind text not null check (kind in ('truck', 'trailer')),
-  fleet_code text not null references public.fleets(code) on delete cascade,
+  fleet_code text not null references public.fleets(code) on delete cascade on update cascade,
   created_at timestamptz not null default now(),
   unique (fleet_code, unit)
 );
@@ -196,7 +207,7 @@ create table if not exists public.inspections (
   driver_name text not null,
   driver_email text not null,
   driver_phone text,
-  fleet_code text not null references public.fleets(code) on delete cascade,
+  fleet_code text not null references public.fleets(code) on delete cascade on update cascade,
   duration_sec integer not null,
   defects jsonb not null default '[]',
   video_path text,
@@ -217,6 +228,13 @@ drop policy if exists "Drivers can insert their own inspections" on public.inspe
 create policy "Drivers can insert their own inspections"
   on public.inspections for insert
   with check (fleet_code = public.current_fleet_code() and driver_id = auth.uid());
+
+-- Only fleet managers can delete an inspection (frees up storage space) — not drivers,
+-- so there's no way for a driver to quietly delete their own submission.
+drop policy if exists "Managers can delete their fleet's inspections" on public.inspections;
+create policy "Managers can delete their fleet's inspections"
+  on public.inspections for delete
+  using (fleet_code = public.current_fleet_code() and public.current_is_manager());
 
 
 -- ============ STORAGE (video + defect photos) ============
@@ -240,4 +258,14 @@ create policy "Fleet members can upload to their fleet folder"
   with check (
     bucket_id = 'inspection-media'
     and (storage.foldername(name))[1] = public.current_fleet_code()
+  );
+
+-- Only managers can delete media (matches the inspections-table delete policy above).
+drop policy if exists "Managers can delete their fleet's media" on storage.objects;
+create policy "Managers can delete their fleet's media"
+  on storage.objects for delete
+  using (
+    bucket_id = 'inspection-media'
+    and (storage.foldername(name))[1] = public.current_fleet_code()
+    and public.current_is_manager()
   );

@@ -773,7 +773,13 @@ function capturePhotoWithMarker(xPct, yPct) {
 }
 
 function newId() {
-  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10));
+  // The inspections table's id column is a real Postgres `uuid`, so every fallback
+  // path here must still produce a valid UUID string, not just a unique-looking one.
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
 
 let pendingUpload = null;
@@ -903,6 +909,7 @@ async function runUpload() {
     $('#upload-title').textContent = 'Upload Failed';
     $('#upload-sub').textContent = "Your recording is still here — don't close the app. Check your connection and try again.";
     $('#upload-progress-wrap').style.display = 'none';
+    $('#upload-error-detail').textContent = (err && err.message) ? err.message : String(err);
     $('#upload-error-actions').style.display = 'block';
   }
 }

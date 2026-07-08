@@ -397,9 +397,11 @@ body::before {
    tap on the chip is a genuine tap on the input — far more reliable across phones/browsers
    than calling .showPicker()/.click() on a hidden 0x0 input, which some mobile browsers
    silently ignore since it isn't a real user gesture on the element itself. */
-.date-chip-wrap { position: relative; display: inline-flex; align-items: center; overflow: hidden; }
+.date-chip-wrap { position: relative; display: inline-flex; align-items: center; }
 .date-chip-overlay {
-  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; margin: 0; padding: 0; cursor: pointer;
+  /* iOS Safari has a known bug where a date input at true opacity:0 can leave its native
+     picker stuck open/unclosable. 0.01 is visually identical to invisible but avoids it. */
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.01; border: none; margin: 0; padding: 0; cursor: pointer;
 }
 
 .dash-list .entry-card { max-width: none; }

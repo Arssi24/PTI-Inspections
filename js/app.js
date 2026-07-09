@@ -206,8 +206,7 @@ async function init() {
   $('.record-stage').addEventListener('click', onTapFlag);
 
   // Only the plain range chips (data-range attribute) use this click-to-select pattern.
-  // The date chip is its own thing below — a real <input type="date"> sits invisibly on
-  // top of it, so it opens the native picker from a genuine tap, not a JS-triggered one.
+  // The date input is its own real, normally-rendered control — see its CSS comment.
   $$('#filter-time .chip[data-range]').forEach((chip) => {
     chip.addEventListener('click', () => {
       $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
@@ -221,8 +220,7 @@ async function init() {
     state.dashRange = 'date';
     state.dashCustomDate = e.target.value;
     $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
-    $('#date-chip-wrap').classList.add('active');
-    $('#chip-pick-date').textContent = new Date(e.target.value + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    $('#filter-date-input').classList.add('active');
     renderDashboard();
   });
   $('#filter-type').addEventListener('change', (e) => { state.dashType = e.target.value; renderDashboard(); });
@@ -1265,7 +1263,8 @@ async function renderDashboard() {
     state.dashType = '';
     state.dashOnlyDefects = false;
     $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
-    $('#chip-pick-date').textContent = 'Pick Date';
+    $('#filter-date-input').classList.remove('active');
+    $('#filter-date-input').value = '';
     $('#filter-driver-input').value = '';
     $('#filter-unit-input').value = '';
     $('#filter-type').value = '';
@@ -1325,7 +1324,10 @@ async function renderEntryCard(r, showDriver) {
     </div>
     <div class="entry-meta">
       ${showDriver ? `<span class="entry-driver">${driverName}</span>` : ''}
-      <span>Video: ${fmtTime(r.duration_sec)}</span>
+      <span class="entry-video-hint">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        ${videoUrl ? `Watch video (${fmtTime(r.duration_sec)}) — tap to open` : 'Video unavailable'}
+      </span>
       ${hasDefects ? `<span class="entry-defect-flag"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${r.defects.length} defect${r.defects.length > 1 ? 's' : ''} flagged</span>` : '<span>No defects flagged</span>'}
     </div>
     <div class="entry-details">

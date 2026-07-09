@@ -330,6 +330,10 @@ body::before {
 .entry-meta { font-size: 12.5px; color: var(--text-mute); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
 .entry-driver { font-size: 12.5px; color: var(--navy); font-weight: 600; }
 .entry-defect-flag { color: var(--red); font-weight: 700; }
+.entry-video-hint {
+  display: inline-flex; align-items: center; gap: 4px; color: var(--primary-dark); font-weight: 700;
+}
+.entry-video-hint .icon { width: 14px; height: 14px; }
 .entry-details { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); display: none; }
 .entry-detail-row { font-size: 12.5px; color: var(--text-mute); margin-bottom: 4px; }
 .entry-detail-row a { color: var(--primary); font-weight: 600; }
@@ -393,16 +397,14 @@ body::before {
 .chip { border: none; background: transparent; padding: 7px 13px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-mute); cursor: pointer; }
 .chip.active { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(16,24,40,0.08); }
 
-/* The real <input type="date"> sits invisibly on top of the chip's own visible label, so a
-   tap on the chip is a genuine tap on the input — far more reliable across phones/browsers
-   than calling .showPicker()/.click() on a hidden 0x0 input, which some mobile browsers
-   silently ignore since it isn't a real user gesture on the element itself. */
-.date-chip-wrap { position: relative; display: inline-flex; align-items: center; }
-.date-chip-overlay {
-  /* iOS Safari has a known bug where a date input at true opacity:0 can leave its native
-     picker stuck open/unclosable. 0.01 is visually identical to invisible but avoids it. */
-  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.01; border: none; margin: 0; padding: 0; cursor: pointer;
+/* A real, normally-rendered <input type="date"> styled to match the other chips — no
+   opacity/overlay tricks. Those caused a real iOS Safari bug (native picker getting stuck
+   open), so the reliable fix is to stop fighting the browser's own rendering of it. */
+.date-input-chip {
+  -webkit-appearance: none; appearance: none;
+  font-family: inherit; color-scheme: light;
 }
+.date-input-chip.active { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(16,24,40,0.08); }
 
 .dash-list .entry-card { max-width: none; }
 .dash-list .entry-details .entry-photos img { width: 96px; height: 96px; }

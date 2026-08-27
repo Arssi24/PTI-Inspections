@@ -52,6 +52,13 @@ async function sbSendPasswordReset(email, redirectTo) {
   return requireSb().auth.resetPasswordForEmail(email, { redirectTo });
 }
 
+async function sbVerifyOtp(email, token, type) {
+  // type is 'signup' for the confirm-account code, 'recovery' for the reset-password code.
+  // On success this establishes a real session — for 'recovery' that's what then lets
+  // updateUser({password}) immediately after actually go through.
+  return requireSb().auth.verifyOtp({ email, token, type });
+}
+
 async function sbUpdatePassword(newPassword) {
   return requireSb().auth.updateUser({ password: newPassword });
 }

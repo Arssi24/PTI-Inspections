@@ -128,22 +128,26 @@
         <label class="field-label">Email</label>
         <input class="field" type="email" id="forgot-email" placeholder="you@company.com" autocomplete="email" />
         <div class="field-error" id="forgot-error" style="display:none;"></div>
-        <button class="btn btn-primary btn-block" id="btn-send-reset">Send reset link</button>
+        <button class="btn btn-primary btn-block" id="btn-send-reset">Send reset code</button>
         <button class="btn btn-link btn-block" data-back="screen-login" type="button">Back to log in</button>
       </div>
     </div>
   </section>
 
-  <!-- ============ CHECK YOUR EMAIL (post signup / post reset request) ============ -->
+  <!-- ============ CHECK YOUR EMAIL (post signup — enter the code) ============ -->
   <section class="screen" id="screen-check-email" data-screen>
     <div class="phone-shell">
       <div class="brand-block">
         <div class="brand-mark">YLM</div>
         <h1>Check your email</h1>
-        <p class="sub" id="check-email-message">We sent you a link — open it to continue.</p>
+        <p class="sub" id="check-email-message">Enter the 6-digit code we just emailed you.</p>
       </div>
       <div class="card">
-        <button class="btn btn-primary btn-block" data-back="screen-login" type="button">Back to log in</button>
+        <label class="field-label">6-digit code</label>
+        <input class="field" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="signup-otp-code" placeholder="123456" autocomplete="one-time-code" />
+        <div class="field-error" id="signup-otp-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-verify-signup-otp" type="button">Verify &amp; Continue</button>
+        <button class="btn btn-link btn-block" data-back="screen-login" type="button">Back to log in</button>
       </div>
     </div>
   </section>
@@ -154,9 +158,11 @@
       <div class="brand-block">
         <div class="brand-mark">YLM</div>
         <h1>Set a new password</h1>
-        <p class="sub">Choose a new password for your account</p>
+        <p class="sub">Enter the code we emailed you, then choose a new password</p>
       </div>
       <div class="card">
+        <label class="field-label">6-digit code</label>
+        <input class="field" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="reset-otp-code" placeholder="123456" autocomplete="one-time-code" />
         <label class="field-label">New password</label>
         <div class="password-field">
           <input class="field" type="password" id="new-password" placeholder="At least 6 characters" autocomplete="new-password" />
@@ -192,6 +198,15 @@
           Log Out
         </button>
       </header>
+
+      <div class="pending-upload-banner" id="pending-upload-banner" style="display:none;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <div class="pending-upload-text">
+          <div id="pending-upload-title">1 recording waiting to upload</div>
+          <div class="pending-upload-sub">Saved on this phone — we'll send it once you're back online.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-retry-pending" type="button">Retry Now</button>
+      </div>
 
       <div class="mode-grid">
         <button class="mode-card" data-type="PTI">
@@ -289,9 +304,10 @@
         </div>
 
         <div class="record-controls-stopped" id="controls-stopped" style="display:none;">
+          <div class="rewatch-hint">Rewatch it above before uploading</div>
           <div class="min-warning" id="min-warning" style="display:none;">Recording is shorter than the required minimum. Please retake.</div>
           <button class="btn btn-outline-light btn-block" id="btn-retake">Delete &amp; Retake</button>
-          <button class="btn btn-primary btn-block" id="btn-save-upload">Save &amp; Upload</button>
+          <button class="btn btn-primary btn-block" id="btn-save-upload">Upload Video</button>
         </div>
       </div>
     </div>
@@ -432,6 +448,7 @@
 <script src="js/supabase.umd.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/supabaseClient.js"></script>
+<script src="js/offlineQueue.js"></script>
 <script src="js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {

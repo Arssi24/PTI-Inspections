@@ -180,6 +180,16 @@ body::before {
 .icon-btn.light.active { background: #f5b93f; border-color: #f5b93f; color: #1a1d33; }
 
 /* ---------- home mode grid ---------- */
+.pending-upload-banner {
+  display: flex; align-items: center; gap: 12px; background: #fff7e6; border: 1px solid #f5d99b;
+  border-radius: 14px; padding: 14px 16px; margin-top: 14px; color: var(--amber-dark, #b45309);
+}
+.pending-upload-banner .icon { width: 22px; height: 22px; flex-shrink: 0; }
+.pending-upload-text { flex: 1; min-width: 0; }
+.pending-upload-text > div:first-child { font-weight: 700; font-size: 14px; color: var(--text); }
+.pending-upload-sub { font-size: 12px; color: var(--text-mute); margin-top: 2px; }
+.pending-upload-banner .btn { margin-top: 0; padding: 9px 14px; font-size: 13px; flex-shrink: 0; }
+
 .mode-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 4px; }
 .mode-card {
   display: flex; align-items: center; gap: 14px;
@@ -288,6 +298,7 @@ body::before {
 
 .record-controls-stopped { width: 100%; max-width: 380px; }
 .min-warning { color: #ffb4b0; font-size: 13px; text-align: center; margin-bottom: 8px; font-weight: 600; }
+.rewatch-hint { color: rgba(255,255,255,0.8); font-size: 13px; text-align: center; margin-bottom: 10px; font-weight: 600; }
 
 /* ---------- uploading screen ---------- */
 .upload-status-block { text-align: center; margin-top: 80px; }

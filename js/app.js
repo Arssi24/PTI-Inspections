@@ -8,6 +8,7 @@ const state = {
   role: 'driver',
   signupRole: 'driver',
   managerSignupMode: 'create',
+  pendingAuthEmail: '',
   userId: null,
   driverName: '',
   driverEmail: '',
@@ -20,6 +21,7 @@ const state = {
   scanTargetTitle: '',
   recorder: null,
   recordedChunks: [],
+  previewVideoUrl: null,
   stream: null,
   scanStream: null,
   scanLoopHandle: null,
@@ -172,6 +174,7 @@ async function init() {
   $('#btn-show-forgot-password').addEventListener('click', () => showScreen('screen-forgot-password'));
   $('#btn-send-reset').addEventListener('click', onForgotPasswordSubmit);
   $('#btn-set-new-password').addEventListener('click', onSetNewPasswordSubmit);
+  $('#btn-verify-signup-otp').addEventListener('click', onVerifySignupOtp);
   $('#btn-logout').addEventListener('click', logout);
   $('#btn-logout-dash').addEventListener('click', logout);
   $('#btn-history').addEventListener('click', openHistory);
@@ -195,12 +198,18 @@ async function init() {
   $('#btn-save-upload').addEventListener('click', onSaveUpload);
   $('#btn-upload-done').addEventListener('click', () => showScreen('screen-home'));
   $('#btn-upload-retry').addEventListener('click', () => { showUploadScreen(); runUpload(); });
-  $('#btn-upload-discard').addEventListener('click', () => {
+  $('#btn-upload-discard').addEventListener('click', async () => {
     if (!confirm('Discard this recording? This cannot be undone.')) return;
+    if (pendingUpload) {
+      try { await queueRemovePendingUpload(pendingUpload.id); } catch (err) { console.error(err); }
+    }
     pendingUpload = null;
     window.onbeforeunload = null;
     showScreen('screen-home');
+    checkPendingUploads();
   });
+  $('#btn-retry-pending').addEventListener('click', retryOldestPendingUpload);
+  window.addEventListener('online', () => { if (state.role === 'driver') checkPendingUploads(); });
 
   $('#record-video').parentElement.querySelector('#marker-layer').addEventListener('click', onTapFlag);
   $('.record-stage').addEventListener('click', onTapFlag);
@@ -266,11 +275,21 @@ async function init() {
 
   let loggedIn = false;
   try {
-    loggedIn = await tryAutoLogin();
+    // Bounded so a slow/unreachable Supabase project (paused project, dead network, etc.)
+    // can never leave the app hanging on launch — it fails open to the login screen after
+    // a few seconds instead of waiting indefinitely on a fetch that may never resolve.
+    loggedIn = await withTimeout(tryAutoLogin(), 8000);
   } catch (err) {
-    console.error('Auto-login check failed:', err);
+    console.error('Auto-login check failed or timed out:', err);
   }
   if (!loggedIn) showScreen('screen-login');
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out after ' + ms + 'ms')), ms)),
+  ]);
 }
 
 /* ---------------- auth ---------------- */
@@ -356,7 +375,8 @@ async function onSignup() {
       return;
     }
     if (!data.session) {
-      showCheckEmailScreen('Click the confirmation link we just emailed you, then come back and log in.');
+      state.pendingAuthEmail = email;
+      showCheckEmailScreen('Enter the 6-digit code we just emailed you.');
       return;
     }
     const profile = await sbGetProfile(data.user.id);
@@ -395,17 +415,23 @@ async function onForgotPasswordSubmit() {
       showAuthError(errEl, error.message);
       return;
     }
-    showCheckEmailScreen("If that email has an account, we've sent a password reset link to it.");
+    state.pendingAuthEmail = email;
+    showScreen('screen-set-new-password');
   } finally {
     btn.disabled = false;
   }
 }
 
 async function onSetNewPasswordSubmit() {
+  const code = $('#reset-otp-code').value.trim();
   const password = $('#new-password').value;
   const passwordConfirm = $('#new-password-confirm').value;
   const errEl = $('#new-password-error');
   errEl.style.display = 'none';
+  if (!code) {
+    showAuthError(errEl, 'Enter the 6-digit code we emailed you.');
+    return;
+  }
   if (password.length < 6) {
     showAuthError(errEl, 'Password must be at least 6 characters.');
     return;
@@ -417,6 +443,13 @@ async function onSetNewPasswordSubmit() {
   const btn = $('#btn-set-new-password');
   btn.disabled = true;
   try {
+    // Verifying the code is what actually signs them in (recovery-type OTP creates a real
+    // session) — updateUser only works once that session exists, so this has to go first.
+    const { error: otpError } = await sbVerifyOtp(state.pendingAuthEmail, code, 'recovery');
+    if (otpError) {
+      showAuthError(errEl, otpError.message);
+      return;
+    }
     const { error } = await sbUpdatePassword(password);
     if (error) {
       showAuthError(errEl, error.message);
@@ -429,6 +462,33 @@ async function onSetNewPasswordSubmit() {
     } else {
       showScreen('screen-login');
     }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function onVerifySignupOtp() {
+  const code = $('#signup-otp-code').value.trim();
+  const errEl = $('#signup-otp-error');
+  errEl.style.display = 'none';
+  if (!code) {
+    showAuthError(errEl, 'Enter the 6-digit code we emailed you.');
+    return;
+  }
+  const btn = $('#btn-verify-signup-otp');
+  btn.disabled = true;
+  try {
+    const { data, error } = await sbVerifyOtp(state.pendingAuthEmail, code, 'signup');
+    if (error) {
+      showAuthError(errEl, error.message);
+      return;
+    }
+    const profile = await sbGetProfile(data.user.id);
+    if (!profile) {
+      showAuthError(errEl, 'Verified — give it a few seconds, then try logging in.');
+      return;
+    }
+    await loginAs(profile);
   } finally {
     btn.disabled = false;
   }
@@ -479,6 +539,7 @@ async function loginAs(profile) {
   if (profile.role === 'driver') {
     $('#home-driver-name').textContent = profile.name.split(' ')[0];
     showScreen('screen-home');
+    checkPendingUploads();
   } else {
     $('#fleet-code-value').textContent = profile.fleet_code;
     state.dashDriver = '';
@@ -629,6 +690,12 @@ async function enterRecordScreen() {
   state.torchOn = false;
 
   const video = $('#record-video');
+  revokePreviewUrl();
+  video.src = '';
+  video.removeAttribute('src');
+  video.controls = false;
+  video.muted = true;
+  video.autoplay = true;
   $('#camera-warning').style.display = 'none';
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({
@@ -725,6 +792,7 @@ function startRecording() {
   }
   state.recordedChunks = [];
   state.recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) state.recordedChunks.push(e.data); };
+  state.recorder.onstop = setupVideoPreview;
   state.recorder.start(500);
 
   state.startedAt = Date.now();
@@ -759,6 +827,30 @@ function stopCameraStream() {
   if (state.stream) {
     state.stream.getTracks().forEach((t) => t.stop());
     state.stream = null;
+  }
+}
+
+// Lets the driver rewatch exactly what they just recorded — with real sound and scrubbing —
+// before committing to upload it. Swaps the same <video> element from live camera feed
+// (srcObject) over to the actual recorded file (src) once every chunk is in.
+function setupVideoPreview() {
+  const mimeType = state.recorder && state.recorder.mimeType ? state.recorder.mimeType : 'video/webm';
+  const blob = new Blob(state.recordedChunks.slice(), { type: mimeType });
+  if (state.previewVideoUrl) URL.revokeObjectURL(state.previewVideoUrl);
+  state.previewVideoUrl = URL.createObjectURL(blob);
+
+  const video = $('#record-video');
+  video.srcObject = null;
+  video.muted = false;
+  video.controls = true;
+  video.autoplay = false;
+  video.src = state.previewVideoUrl;
+}
+
+function revokePreviewUrl() {
+  if (state.previewVideoUrl) {
+    URL.revokeObjectURL(state.previewVideoUrl);
+    state.previewVideoUrl = null;
   }
 }
 
@@ -863,7 +955,49 @@ let pendingUpload = null;
 let uploadStartTime = null;
 let uploadTimerHandle = null;
 
-function onSaveUpload() {
+// Shows/hides the "recording waiting to upload" banner on Home, and — if there's actually a
+// connection right now — kicks off an automatic retry without the driver needing to do
+// anything. Safe to call anytime (login, regaining connectivity, after an upload settles).
+async function checkPendingUploads() {
+  const banner = $('#pending-upload-banner');
+  if (!banner) return;
+  let items = [];
+  try {
+    items = await queueGetAllPendingUploads();
+  } catch (err) {
+    console.error('Could not read offline upload queue', err);
+    return;
+  }
+  if (items.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  $('#pending-upload-title').textContent = items.length === 1
+    ? '1 recording waiting to upload'
+    : `${items.length} recordings waiting to upload`;
+  banner.style.display = 'flex';
+  if (navigator.onLine) retryOldestPendingUpload();
+}
+
+async function retryOldestPendingUpload() {
+  let items = [];
+  try {
+    items = await queueGetAllPendingUploads();
+  } catch (err) {
+    console.error('Could not read offline upload queue', err);
+    return;
+  }
+  if (items.length === 0) {
+    $('#pending-upload-banner').style.display = 'none';
+    return;
+  }
+  pendingUpload = items[0];
+  showUploadScreen();
+  await runUpload();
+}
+
+async function onSaveUpload() {
+  revokePreviewUrl();
   const mimeType = state.recorder && state.recorder.mimeType ? state.recorder.mimeType : 'video/webm';
   const videoExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
   pendingUpload = {
@@ -880,6 +1014,14 @@ function onSaveUpload() {
     videoBlob: new Blob(state.recordedChunks.slice(), { type: mimeType }),
     videoExt,
   };
+  // Persisted to disk BEFORE we even try the network — so a driver with zero signal can
+  // close the app entirely and the recording is still sitting there safely next time they
+  // open it, instead of only living in memory and vanishing if the app gets closed.
+  try {
+    await queueSavePendingUpload(pendingUpload);
+  } catch (err) {
+    console.error('Could not save to offline queue', err);
+  }
   showUploadScreen();
   runUpload();
 }
@@ -968,6 +1110,13 @@ async function runUpload() {
     });
     if (error) throw error;
 
+    try {
+      await queueRemovePendingUpload(p.id);
+    } catch (err) {
+      console.error('Could not clear offline queue entry', err);
+    }
+    checkPendingUploads();
+
     clearInterval(uploadTimerHandle);
     window.onbeforeunload = null;
     pendingUpload = null;
@@ -1005,9 +1154,13 @@ async function openHistory() {
     list.innerHTML = '<div class="empty-state">No submissions yet.<br>Run a PTI, Hook, or Drop to see it here.</div>';
     return;
   }
-  for (const r of mine) {
-    list.appendChild(await renderEntryCard(r, false));
-  }
+  // Build every card's signed URLs in parallel instead of one at a time — with a lot of
+  // history piled up, awaiting each card fully before starting the next turned "open
+  // history" into a slow, seemingly-frozen wait (one network round-trip per card, back to
+  // back). This fetches all of them concurrently, so total wait is roughly the time of the
+  // single slowest card instead of the sum of every card.
+  const cards = await Promise.all(mine.map((r) => renderEntryCard(r, false)));
+  cards.forEach((card) => list.appendChild(card));
 }
 
 /* ---------------- fleet units (trucks & trailers) ---------------- */
@@ -1276,9 +1429,9 @@ async function renderDashboard() {
     list.innerHTML = '<div class="empty-state">No inspections match these filters.</div>';
     return;
   }
-  for (const r of filtered) {
-    list.appendChild(await renderEntryCard(r, true));
-  }
+  // Same fix as driver history — build cards concurrently, not one full round-trip at a time.
+  const cards = await Promise.all(filtered.map((r) => renderEntryCard(r, true)));
+  cards.forEach((card) => list.appendChild(card));
 }
 
 async function renderEntryCard(r, showDriver) {

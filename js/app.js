@@ -9,6 +9,7 @@ const state = {
   signupRole: 'driver',
   managerSignupMode: 'create',
   pendingAuthEmail: '',
+  silentRetryInFlight: false,
   userId: null,
   driverName: '',
   driverEmail: '',
@@ -576,7 +577,10 @@ function startFlow(type) {
 async function loadAvailableUnits() {
   try {
     const units = await sbGetUnits(state.fleetCode);
-    state.availableUnits = units.map((u) => u.unit);
+    // HOOK and DROP are trailer-only operations — only PTI can be done against either kind,
+    // since a pre-trip walkaround covers the truck and whatever trailer's attached.
+    const relevant = state.currentType === 'PTI' ? units : units.filter((u) => u.kind === 'trailer');
+    state.availableUnits = relevant.map((u) => u.unit);
   } catch (err) {
     console.warn('Could not load units list', err);
     state.availableUnits = [];
@@ -956,8 +960,10 @@ let uploadStartTime = null;
 let uploadTimerHandle = null;
 
 // Shows/hides the "recording waiting to upload" banner on Home, and — if there's actually a
-// connection right now — kicks off an automatic retry without the driver needing to do
-// anything. Safe to call anytime (login, regaining connectivity, after an upload settles).
+// connection right now — kicks off an automatic retry IN THE BACKGROUND, without ever
+// switching screens. (Earlier version of this jumped straight to the full-screen upload
+// view, which meant opening the app could suddenly hijack into a slow/stuck upload attempt
+// instead of just showing Home — exactly what looked like "the app is slow to open.")
 async function checkPendingUploads() {
   const banner = $('#pending-upload-banner');
   if (!banner) return;
@@ -976,7 +982,27 @@ async function checkPendingUploads() {
     ? '1 recording waiting to upload'
     : `${items.length} recordings waiting to upload`;
   banner.style.display = 'flex';
-  if (navigator.onLine) retryOldestPendingUpload();
+  if (navigator.onLine && !state.silentRetryInFlight) {
+    state.silentRetryInFlight = true;
+    silentRetryPendingUpload(items[0]).finally(() => { state.silentRetryInFlight = false; });
+  }
+}
+
+// Background counterpart to retryOldestPendingUpload() below — same upload, but reports
+// progress into the Home-screen banner instead of taking over the whole screen. Used for the
+// automatic retry; the banner's own "Retry Now" button still uses the full-screen version,
+// since that's an explicit tap where showing full progress is exactly what's expected.
+async function silentRetryPendingUpload(record) {
+  const titleEl = $('#pending-upload-title');
+  try {
+    await performUpload(record, (fraction) => {
+      if (titleEl) titleEl.textContent = `Uploading in background… ${Math.round(fraction * 100)}%`;
+    });
+  } catch (err) {
+    console.warn('Background retry failed — will try again next time the app opens or comes back online', err);
+  } finally {
+    checkPendingUploads();
+  }
 }
 
 async function retryOldestPendingUpload() {
@@ -1060,61 +1086,69 @@ function showUploadScreen() {
   window.onbeforeunload = () => 'An upload is still in progress. Leave anyway?';
 }
 
+// The actual network work, with zero UI assumptions — used both by the full-screen flow
+// (fresh recording, or an explicit "Retry Now" tap) and by the silent background retry that
+// runs on app open/regained connectivity. Throws on failure; the queue entry is only removed
+// once the database row is actually confirmed written.
+async function performUpload(p, onProgress) {
+  const photoBlobs = [];
+  for (const d of p.defectsRaw) {
+    const res = await fetch(d.photo);
+    photoBlobs.push(await res.blob());
+  }
+  const totalBytes = p.videoBlob.size + photoBlobs.reduce((s, b) => s + b.size, 0) || 1;
+  let uploadedBytes = 0;
+
+  const videoPath = `${p.fleetCode}/${p.type}/${p.id}/video.${p.videoExt}`;
+  await sbUploadBlobWithProgress(videoPath, p.videoBlob, (loaded) => {
+    onProgress((uploadedBytes + loaded) / totalBytes);
+  });
+  uploadedBytes += p.videoBlob.size;
+  onProgress(uploadedBytes / totalBytes);
+
+  const defects = [];
+  for (let i = 0; i < p.defectsRaw.length; i++) {
+    const d = p.defectsRaw[i];
+    const blob = photoBlobs[i];
+    const photoPath = `${p.fleetCode}/${p.type}/${p.id}/defect-${i}.jpg`;
+    await sbUploadBlobWithProgress(photoPath, blob, (loaded) => {
+      onProgress((uploadedBytes + loaded) / totalBytes);
+    });
+    uploadedBytes += blob.size;
+    onProgress(uploadedBytes / totalBytes);
+    defects.push({ id: d.id, t: d.t, x: d.x, y: d.y, photo_path: photoPath });
+  }
+
+  const { error } = await sbInsertInspection({
+    id: p.id,
+    type: p.type,
+    unit: p.unit,
+    driver_id: state.userId,
+    driver_name: p.driverName,
+    driver_email: p.driverEmail,
+    driver_phone: p.driverPhone,
+    fleet_code: p.fleetCode,
+    duration_sec: p.durationSec,
+    defects,
+    video_path: videoPath,
+    lat: p.location ? p.location.lat : null,
+    lng: p.location ? p.location.lng : null,
+    location_accuracy_m: p.location ? p.location.accuracyM : null,
+  });
+  if (error) throw error;
+
+  try {
+    await queueRemovePendingUpload(p.id);
+  } catch (err) {
+    console.error('Could not clear offline queue entry', err);
+  }
+}
+
 async function runUpload() {
   const p = pendingUpload;
   if (!p) return;
   try {
-    const photoBlobs = [];
-    for (const d of p.defectsRaw) {
-      const res = await fetch(d.photo);
-      photoBlobs.push(await res.blob());
-    }
-    const totalBytes = p.videoBlob.size + photoBlobs.reduce((s, b) => s + b.size, 0) || 1;
-    let uploadedBytes = 0;
-
-    const videoPath = `${p.fleetCode}/${p.type}/${p.id}/video.${p.videoExt}`;
-    await sbUploadBlobWithProgress(videoPath, p.videoBlob, (loaded) => {
-      setUploadProgress((uploadedBytes + loaded) / totalBytes);
-    });
-    uploadedBytes += p.videoBlob.size;
-    setUploadProgress(uploadedBytes / totalBytes);
-
-    const defects = [];
-    for (let i = 0; i < p.defectsRaw.length; i++) {
-      const d = p.defectsRaw[i];
-      const blob = photoBlobs[i];
-      const photoPath = `${p.fleetCode}/${p.type}/${p.id}/defect-${i}.jpg`;
-      await sbUploadBlobWithProgress(photoPath, blob, (loaded) => {
-        setUploadProgress((uploadedBytes + loaded) / totalBytes);
-      });
-      uploadedBytes += blob.size;
-      setUploadProgress(uploadedBytes / totalBytes);
-      defects.push({ id: d.id, t: d.t, x: d.x, y: d.y, photo_path: photoPath });
-    }
-
-    const { error } = await sbInsertInspection({
-      id: p.id,
-      type: p.type,
-      unit: p.unit,
-      driver_id: state.userId,
-      driver_name: p.driverName,
-      driver_email: p.driverEmail,
-      driver_phone: p.driverPhone,
-      fleet_code: p.fleetCode,
-      duration_sec: p.durationSec,
-      defects,
-      video_path: videoPath,
-      lat: p.location ? p.location.lat : null,
-      lng: p.location ? p.location.lng : null,
-      location_accuracy_m: p.location ? p.location.accuracyM : null,
-    });
-    if (error) throw error;
-
-    try {
-      await queueRemovePendingUpload(p.id);
-    } catch (err) {
-      console.error('Could not clear offline queue entry', err);
-    }
+    await performUpload(p, setUploadProgress);
     checkPendingUploads();
 
     clearInterval(uploadTimerHandle);
@@ -1546,6 +1580,20 @@ async function downloadFile(url, filename, btn) {
   try {
     const res = await fetch(url);
     const blob = await res.blob();
+
+    // iOS Safari has never reliably honored <a download> for media blobs — it just opens/
+    // navigates to the blob URL instead of saving a file, which is exactly what looked like
+    // "took me to a page but nothing downloaded." navigator.share() with a real File is the
+    // actual iOS-native way to save/send a file — it opens the share sheet with "Save Video"
+    // (Photos), "Save to Files", and direct app targets (including straight into CapCut).
+    const file = new File([blob], filename, { type: blob.type || 'video/webm' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    }
+
+    // Desktop browsers (and any platform without Web Share support) — the classic pattern
+    // works fine there.
     const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = objectUrl;
@@ -1553,6 +1601,7 @@ async function downloadFile(url, filename, btn) {
     a.click();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
   } catch (err) {
+    if (err && err.name === 'AbortError') return; // user cancelled the share sheet — not an error
     console.error('Download failed', err);
     alert('Could not download the video — try again.');
   } finally {

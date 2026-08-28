@@ -797,7 +797,14 @@ function startRecording() {
   state.recordedChunks = [];
   state.recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) state.recordedChunks.push(e.data); };
   state.recorder.onstop = setupVideoPreview;
-  state.recorder.start(500);
+  // No timeslice argument — this is deliberate. Requesting data every 500ms produces many
+  // small fragments that get concatenated into the final blob, and on iOS Safari that
+  // fragmented result can play (leniently) in the very <video> tag that recorded it, while
+  // stricter consumers like Photos or CapCut reject it as an invalid/unfinalized file —
+  // exactly "plays a few seconds then errors, won't import elsewhere." Recording as one
+  // continuous stream and only pulling data when it actually stops produces a single, cleanly
+  // finalized file instead.
+  state.recorder.start();
 
   state.startedAt = Date.now();
   state.elapsedSec = 0;
@@ -1587,9 +1594,17 @@ async function downloadFile(url, filename, btn) {
     // actual iOS-native way to save/send a file — it opens the share sheet with "Save Video"
     // (Photos), "Save to Files", and direct app targets (including straight into CapCut).
     const file = new File([blob], filename, { type: blob.type || 'video/webm' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: filename });
-      return;
+    // Try sharing directly rather than gating on canShare() first — canShare() can be overly
+    // conservative about certain file types (e.g. .webm) and report "not shareable" even when
+    // share() itself would have worked, silently pushing us into the broken iOS fallback below.
+    if (navigator.share) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      } catch (shareErr) {
+        if (shareErr && shareErr.name === 'AbortError') return; // user cancelled the share sheet
+        console.warn('navigator.share failed, falling back to direct download link', shareErr);
+      }
     }
 
     // Desktop browsers (and any platform without Web Share support) — the classic pattern

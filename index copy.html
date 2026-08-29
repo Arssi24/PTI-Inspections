@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>YLM Record PTI</title>
+<link rel="stylesheet" href="css/styles.css" />
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#2a2f50" />
+<link rel="icon" href="assets/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="YLM Record PTI" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ LOGIN ============ -->
+  <section class="screen" id="screen-login" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>YLM Record PTI</h1>
+        <p class="sub">Fleet walkaround &amp; inspection app</p>
+      </div>
+
+      <div class="card">
+        <p class="demo-note">Real accounts, backed by Supabase. Fleet managers get a fleet code on sign-up — share it with your drivers so their submissions link to your dashboard.</p>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login" type="button">Log In</button>
+          <button class="auth-tab" data-tab="signup" type="button">Create Account</button>
+        </div>
+
+        <!-- Sign up -->
+        <div id="tab-signup" style="display:none;">
+          <label class="field-label">Full name</label>
+          <input class="field" type="text" id="signup-name" placeholder="e.g. Mike Reyes" autocomplete="name" />
+          <label class="field-label">Email</label>
+          <input class="field" type="email" id="signup-email" placeholder="you@company.com" autocomplete="email" />
+          <label class="field-label">Phone <span class="field-optional">(optional)</span></label>
+          <input class="field" type="tel" id="signup-phone" placeholder="(555) 555-0100" autocomplete="tel" />
+          <label class="field-label">Password</label>
+          <div class="password-field">
+            <input class="field" type="password" id="signup-password" placeholder="Choose a password" autocomplete="new-password" />
+            <button class="password-toggle-btn" type="button" title="Show password">
+              <svg class="icon eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <label class="field-label">Repeat password</label>
+          <div class="password-field">
+            <input class="field" type="password" id="signup-password-confirm" placeholder="Type your password again" autocomplete="new-password" />
+            <button class="password-toggle-btn" type="button" title="Show password">
+              <svg class="icon eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+
+          <label class="field-label">I am a…</label>
+          <div class="role-toggle" id="signup-role-toggle">
+            <button class="role-btn active" data-role="driver" type="button">Driver</button>
+            <button class="role-btn" data-role="manager" type="button">Fleet Manager</button>
+          </div>
+
+          <div id="signup-fleet-code-field">
+            <label class="field-label">Fleet access code</label>
+            <input class="field" type="text" id="signup-fleet-code" placeholder="Ask your fleet manager for this" autocomplete="off" />
+          </div>
+
+          <div id="manager-mode-field" style="display:none;">
+            <label class="field-label">Fleet setup</label>
+            <div class="role-toggle">
+              <button class="role-btn manager-mode-btn active" data-mode="create" type="button">Start a new fleet</button>
+              <button class="role-btn manager-mode-btn" data-mode="join" type="button">Join an existing fleet</button>
+            </div>
+            <p class="field-hint" id="manager-create-hint">Pick this if you're the first/only manager setting this up. A brand-new, unique fleet code is generated automatically — give it to your drivers so they link to your dashboard.</p>
+            <div id="manager-join-code-field" style="display:none;">
+              <p class="field-hint">Only pick this if <strong>another manager already ran "Start a new fleet"</strong> and gave you their code — this links your account to their existing dashboard instead of creating a separate one.</p>
+              <label class="field-label">Existing fleet code</label>
+              <input class="field" type="text" id="signup-manager-fleet-code" placeholder="Ask another manager on your team" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="field-error" id="signup-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-signup">Create Account</button>
+        </div>
+
+        <!-- Log in -->
+        <div id="tab-login">
+          <label class="field-label">Email</label>
+          <input class="field" type="email" id="login-email" placeholder="you@company.com" autocomplete="email" />
+          <label class="field-label">Password</label>
+          <div class="password-field">
+            <input class="field" type="password" id="login-password" placeholder="Your password" autocomplete="current-password" />
+            <button class="password-toggle-btn" type="button" title="Show password">
+              <svg class="icon eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <!-- Purely cosmetic — sessions already stay signed in permanently regardless of
+               this checkbox, so there's nothing to wire up here. It exists because an
+               unchecked-looking login form reads as broken/unfinished to most users. -->
+          <label class="remember-me-row">
+            <input type="checkbox" id="remember-me-checkbox" checked />
+            Remember me
+          </label>
+          <div class="field-error" id="login-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-login">Log In</button>
+          <button class="btn btn-link btn-block" id="btn-show-forgot-password" type="button">Forgot password?</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FORGOT PASSWORD ============ -->
+  <section class="screen" id="screen-forgot-password" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>Reset your password</h1>
+        <p class="sub">We'll email you a link to set a new one</p>
+      </div>
+      <div class="card">
+        <label class="field-label">Email</label>
+        <input class="field" type="email" id="forgot-email" placeholder="you@company.com" autocomplete="email" />
+        <div class="field-error" id="forgot-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-send-reset">Send reset code</button>
+        <button class="btn btn-link btn-block" data-back="screen-login" type="button">Back to log in</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHECK YOUR EMAIL (post signup — enter the code) ============ -->
+  <section class="screen" id="screen-check-email" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>Check your email</h1>
+        <p class="sub" id="check-email-message">Enter the 6-digit code we just emailed you.</p>
+      </div>
+      <div class="card">
+        <label class="field-label">6-digit code</label>
+        <input class="field" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="signup-otp-code" placeholder="123456" autocomplete="one-time-code" />
+        <div class="field-error" id="signup-otp-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-verify-signup-otp" type="button">Verify &amp; Continue</button>
+        <button class="btn btn-link btn-block" data-back="screen-login" type="button">Back to log in</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SET NEW PASSWORD (landed here from the email link) ============ -->
+  <section class="screen" id="screen-set-new-password" data-screen>
+    <div class="phone-shell">
+      <div class="brand-block">
+        <div class="brand-mark">YLM</div>
+        <h1>Set a new password</h1>
+        <p class="sub">Enter the code we emailed you, then choose a new password</p>
+      </div>
+      <div class="card">
+        <label class="field-label">6-digit code</label>
+        <input class="field" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="reset-otp-code" placeholder="123456" autocomplete="one-time-code" />
+        <label class="field-label">New password</label>
+        <div class="password-field">
+          <input class="field" type="password" id="new-password" placeholder="At least 6 characters" autocomplete="new-password" />
+          <button class="password-toggle-btn" type="button" title="Show password">
+            <svg class="icon eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+        <label class="field-label">Repeat new password</label>
+        <div class="password-field">
+          <input class="field" type="password" id="new-password-confirm" placeholder="Type it again" autocomplete="new-password" />
+          <button class="password-toggle-btn" type="button" title="Show password">
+            <svg class="icon eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+        <div class="field-error" id="new-password-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-set-new-password">Save new password</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DRIVER HOME ============ -->
+  <section class="screen" id="screen-home" data-screen>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <div>
+          <div class="hello">Hi, <span id="home-driver-name">Driver</span></div>
+          <div class="hello-sub">Ready for your next check?</div>
+        </div>
+        <button class="logout-btn" id="btn-logout" title="Log out">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Log Out
+        </button>
+      </header>
+
+      <div class="pending-upload-banner" id="pending-upload-banner" style="display:none;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <div class="pending-upload-text">
+          <div id="pending-upload-title">1 recording waiting to upload</div>
+          <div class="pending-upload-sub">Saved on this phone — we'll send it once you're back online.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-retry-pending" type="button">Retry Now</button>
+      </div>
+
+      <div class="mode-grid">
+        <button class="mode-card" data-type="PTI">
+          <div class="mode-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4z"/><path d="M8.5 13l2.3 2.3L15.5 10.5"/></svg>
+          </div>
+          <div class="mode-title">PTI</div>
+          <div class="mode-sub">Pre-trip inspection · 4:00 min</div>
+        </button>
+        <button class="mode-card" data-type="HOOK">
+          <div class="mode-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div class="mode-title">HOOK</div>
+          <div class="mode-sub">Hook up trailer · 1:00 min</div>
+        </button>
+        <button class="mode-card" data-type="DROP">
+          <div class="mode-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div class="mode-title">DROP</div>
+          <div class="mode-sub">Drop trailer · 1:00 min</div>
+        </button>
+      </div>
+
+      <button class="btn btn-secondary btn-block" id="btn-history">View My History</button>
+    </div>
+  </section>
+
+  <!-- ============ QR SCAN ============ -->
+  <section class="screen" id="screen-scan" data-screen>
+    <div class="phone-shell dark">
+      <header class="top-bar dark">
+        <button class="icon-btn" data-back="screen-home">←</button>
+        <div class="hello" id="scan-title">Scan unit QR code</div>
+        <div style="width:32px"></div>
+      </header>
+
+      <div class="scan-frame">
+        <video id="scan-video" playsinline muted></video>
+        <div class="scan-reticle"></div>
+        <div class="scan-hint">Point camera at the QR code on the truck / trailer</div>
+      </div>
+
+      <div class="card manual-entry">
+        <label class="field-label">Or pick a unit manually</label>
+        <div class="manual-row">
+          <div class="combo" id="combo-manual-unit">
+            <input class="field field-inline combo-input" type="text" id="manual-unit" placeholder="Start typing a truck/trailer number…" autocomplete="off" />
+            <div class="combo-list" id="manual-unit-list"></div>
+          </div>
+          <button class="btn btn-primary" id="btn-manual-submit">Use</button>
+        </div>
+        <div class="field-error" id="manual-unit-error" style="display:none;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RECORDING ============ -->
+  <section class="screen" id="screen-record" data-screen>
+    <div class="record-stage">
+      <video id="record-video" playsinline muted autoplay></video>
+      <canvas id="record-canvas" style="display:none;"></canvas>
+      <div id="marker-layer" class="marker-layer"></div>
+
+      <div class="record-topbar">
+        <button class="icon-btn light" data-back="screen-home" id="btn-record-close">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="record-badge" id="record-type-badge">PTI</div>
+        <div class="record-unit-badge" id="record-unit-badge">TRK-104</div>
+        <button class="icon-btn light" id="btn-torch-toggle" title="Toggle flashlight" style="display:none;">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        </button>
+      </div>
+
+      <div class="record-timer-wrap">
+        <div class="record-timer" id="record-timer">0:00</div>
+        <div class="record-min" id="record-min-req" style="display:none;">min 4:00</div>
+        <div class="record-location" id="record-location">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="record-location-text">Locating…</span>
+        </div>
+      </div>
+
+      <div class="camera-warning" id="camera-warning" style="display:none;">Camera/microphone permission is required to record. Check your browser/device settings and try again.</div>
+
+      <div class="record-bottom">
+        <div class="defect-count" id="defect-count-wrap" style="visibility:hidden;">
+          <span id="defect-count">0</span> defect photo(s) flagged
+        </div>
+
+        <div class="record-controls" id="controls-live">
+          <button class="record-btn" id="btn-record-toggle"><span class="record-dot"></span></button>
+        </div>
+
+        <div class="record-controls-stopped" id="controls-stopped" style="display:none;">
+          <div class="rewatch-hint">Rewatch it above before uploading</div>
+          <div class="min-warning" id="min-warning" style="display:none;">Recording is shorter than the required minimum. Please retake.</div>
+          <button class="btn btn-outline-light btn-block" id="btn-retake">Delete &amp; Retake</button>
+          <button class="btn btn-primary btn-block" id="btn-save-upload">Upload Video</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ UPLOADING ============ -->
+  <section class="screen" id="screen-uploading" data-screen>
+    <div class="phone-shell">
+      <div class="upload-status-block">
+        <div class="upload-icon" id="upload-icon">
+          <svg class="icon upload-spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
+        </div>
+        <h2 id="upload-title">Uploading…</h2>
+        <p class="upload-sub" id="upload-sub">Keep this screen open until it finishes — closing early can lose the upload.</p>
+
+        <div class="upload-progress-wrap" id="upload-progress-wrap">
+          <div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
+          <div class="upload-progress-meta">
+            <span id="upload-percent">0%</span>
+            <span id="upload-elapsed">0:00</span>
+          </div>
+        </div>
+
+        <div id="upload-error-actions" style="display:none;">
+          <div class="upload-error-detail" id="upload-error-detail"></div>
+          <button class="btn btn-primary btn-block" id="btn-upload-retry">Try Again</button>
+          <button class="btn btn-secondary btn-block" id="btn-upload-discard">Discard Recording</button>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="btn-upload-done" style="display:none;">Back to Home</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HISTORY (driver) ============ -->
+  <section class="screen" id="screen-history" data-screen>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <button class="icon-btn" data-back="screen-home">←</button>
+        <div class="hello">My History</div>
+        <div style="width:32px"></div>
+      </header>
+      <div id="history-list" class="entry-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ FLEET MANAGER DASHBOARD ============ -->
+  <section class="screen" id="screen-dashboard" data-screen>
+    <div class="dashboard">
+      <header class="dash-header">
+        <div>
+          <div class="dash-title">Fleet Manager Dashboard</div>
+          <div class="dash-sub">All driver inspections, synced in real time</div>
+        </div>
+        <div class="dash-header-right">
+          <div class="fleet-code-chip" id="fleet-code-chip" title="Give this code to your drivers so their accounts link to your fleet">
+            Fleet code: <strong id="fleet-code-value">—</strong>
+          </div>
+          <button class="logout-btn" id="btn-logout-dash" title="Log out">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Log Out
+          </button>
+        </div>
+      </header>
+
+      <div class="dash-tabs">
+        <button class="dash-tab active" data-panel="inspections" type="button">Inspections</button>
+        <button class="dash-tab" data-panel="units" type="button">Trucks &amp; Trailers</button>
+        <button class="dash-tab" data-panel="drivers" type="button">Drivers</button>
+      </div>
+
+      <!-- Inspections panel -->
+      <div class="dash-panel active" id="panel-inspections">
+        <div class="dash-stats" id="dash-stats"></div>
+
+        <div class="dash-filters">
+          <div class="filter-group" id="filter-time">
+            <button class="chip active" data-range="today">Today</button>
+            <button class="chip" data-range="7d">Last 7 Days</button>
+            <input type="date" id="filter-date-input" class="chip date-input-chip" />
+          </div>
+          <div class="combo" id="combo-unit">
+            <input type="text" class="field field-inline combo-input" id="filter-unit-input" placeholder="All Trucks &amp; Trailers" autocomplete="off" />
+            <div class="combo-list" id="filter-unit-list"></div>
+          </div>
+          <div class="combo" id="combo-driver">
+            <input type="text" class="field field-inline combo-input" id="filter-driver-input" placeholder="All Drivers" autocomplete="off" />
+            <div class="combo-list" id="filter-driver-list"></div>
+          </div>
+          <select class="field field-inline" id="filter-type">
+            <option value="">All Types</option>
+            <option value="PTI">PTI</option>
+            <option value="HOOK">HOOK</option>
+            <option value="DROP">DROP</option>
+          </select>
+        </div>
+
+        <div id="dash-list" class="entry-list dash-list"></div>
+      </div>
+
+      <!-- Fleet Units panel -->
+      <div class="dash-panel" id="panel-units">
+        <div class="card unit-add-card">
+          <label class="field-label">Unit number</label>
+          <input class="field" type="text" id="unit-number-input" placeholder="e.g. TRK-612" autocomplete="off" />
+          <label class="field-label">Type</label>
+          <div class="role-toggle">
+            <button class="role-btn kind-btn active" data-kind="truck" type="button">Truck</button>
+            <button class="role-btn kind-btn" data-kind="trailer" type="button">Trailer</button>
+          </div>
+          <div class="field-error" id="unit-add-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-add-unit">Add to Fleet</button>
+        </div>
+        <div id="units-list" class="entry-list"></div>
+      </div>
+
+      <!-- Drivers panel -->
+      <div class="dash-panel" id="panel-drivers">
+        <div class="dash-stats" id="drivers-stats"></div>
+        <p class="demo-note">Everyone who's signed up with your fleet code, whether or not they've submitted an inspection yet.</p>
+        <div id="drivers-list" class="entry-list"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ PHOTO LIGHTBOX (overlay, not a screen) ============ -->
+<div class="lightbox" id="photo-lightbox">
+  <button class="lightbox-close" id="lightbox-close" type="button">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <img id="lightbox-img" src="" alt="Defect photo" />
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="js/qrcode.min.js"></script>
+<script src="js/supabase.umd.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/offlineQueue.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch((err) => console.warn('SW registration failed', err));
+    });
+  }
+</script>
+</body>
+</html>

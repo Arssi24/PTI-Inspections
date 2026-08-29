@@ -13,6 +13,7 @@ const state = {
   managerSignupMode: 'create',
   pendingAuthEmail: '',
   silentRetryInFlight: false,
+  activeVideoObjectUrls: [],
   userId: null,
   driverName: '',
   driverEmail: '',
@@ -1186,8 +1187,14 @@ async function runUpload() {
 
 /* ---------------- driver history ---------------- */
 
+function revokeActiveVideoObjectUrls() {
+  state.activeVideoObjectUrls.forEach((u) => URL.revokeObjectURL(u));
+  state.activeVideoObjectUrls = [];
+}
+
 async function openHistory() {
   showScreen('screen-history');
+  revokeActiveVideoObjectUrls();
   const list = $('#history-list');
   list.innerHTML = '<div class="empty-state">Loading…</div>';
 
@@ -1412,6 +1419,7 @@ function inRange(ts, range) {
 }
 
 async function renderDashboard() {
+  revokeActiveVideoObjectUrls();
   const list = $('#dash-list');
   list.innerHTML = '<div class="empty-state">Loading…</div>';
 
@@ -1499,9 +1507,17 @@ async function renderEntryCard(r, showDriver) {
   }
 
   const videoUrl = r.video_path ? await sbSignedUrl(r.video_path) : null;
+  // No `src` set here on purpose — pointing <video> straight at the remote signed URL makes
+  // Safari treat it as a stream it needs to seek/probe, and a raw MediaRecorder file doesn't
+  // have the index that requires, which is exactly what caused "plays a few seconds then
+  // errors." Fully fetching the file into memory first and playing it as a local blob (like
+  // the working right-after-recording preview already does) sidesteps that entirely — it's
+  // loaded lazily, only once this specific entry is actually opened, not for every item in
+  // the list.
   const videoHtml = videoUrl
     ? `<div class="entry-video-wrap">
-         <video controls playsinline preload="metadata" src="${videoUrl}"></video>
+         <div class="entry-video-loading">Loading video…</div>
+         <video controls playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}"></video>
          <div class="entry-video-actions">
            <button class="entry-download-btn" data-video-url="${videoUrl}" data-video-name="${unit}-${r.type}-${r.id}.${videoUrl.includes('.mp4') ? 'mp4' : 'webm'}" type="button">
              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1541,7 +1557,11 @@ async function renderEntryCard(r, showDriver) {
       ` : ''}
     </div>
   `;
-  card.addEventListener('click', () => card.classList.toggle('open'));
+  card.addEventListener('click', () => {
+    const opening = !card.classList.contains('open');
+    card.classList.toggle('open');
+    if (opening) loadCardVideo(card);
+  });
   card.querySelectorAll('.entry-photos img').forEach((img) => {
     img.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1575,6 +1595,29 @@ async function renderEntryCard(r, showDriver) {
   }
   card.querySelector('video, .entry-video-actions')?.addEventListener('click', (e) => e.stopPropagation());
   return card;
+}
+
+async function loadCardVideo(card) {
+  const video = card.querySelector('.entry-video-wrap video');
+  const loadingEl = card.querySelector('.entry-video-loading');
+  if (!video || video.dataset.loaded) return;
+  const remoteUrl = video.dataset.remoteUrl;
+  if (!remoteUrl) return;
+  video.dataset.loaded = '1'; // set immediately so re-toggling the card doesn't re-fetch
+  try {
+    const res = await fetch(remoteUrl);
+    if (!res.ok) throw new Error(`Could not fetch video (${res.status})`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    state.activeVideoObjectUrls.push(objectUrl);
+    video.src = objectUrl;
+    video.style.display = 'block';
+    if (loadingEl) loadingEl.style.display = 'none';
+  } catch (err) {
+    console.error('Could not load video', err);
+    if (loadingEl) loadingEl.textContent = 'Could not load video — check your connection and try again.';
+    video.dataset.loaded = ''; // allow retry on next open
+  }
 }
 
 function openLightbox(url) {

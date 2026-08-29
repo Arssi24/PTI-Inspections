@@ -358,6 +358,10 @@ body::before {
 
 .entry-video-wrap { margin-top: 10px; }
 .entry-video-wrap video { width: 100%; border-radius: 10px; background: #000; display: block; max-height: 360px; }
+.entry-video-loading {
+  height: 140px; border-radius: 10px; background: #f2f4f7; color: var(--text-mute);
+  display: flex; align-items: center; justify-content: center; font-size: 13.5px; font-weight: 600;
+}
 .entry-video-actions { display: flex; gap: 8px; margin-top: 8px; }
 .entry-download-btn {
   display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: #fff;

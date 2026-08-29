@@ -192,6 +192,7 @@ async function init() {
     btn.addEventListener('click', () => {
       stopScanLoop();
       stopCameraStream();
+      resetRecordVideoElement();
       showScreen(btn.dataset.back);
     });
   });
@@ -201,7 +202,10 @@ async function init() {
   $('#btn-torch-toggle').addEventListener('click', onToggleTorch);
   $('#btn-retake').addEventListener('click', onRetake);
   $('#btn-save-upload').addEventListener('click', onSaveUpload);
-  $('#btn-upload-done').addEventListener('click', () => showScreen('screen-home'));
+  $('#btn-upload-done').addEventListener('click', () => {
+    resetRecordVideoElement();
+    showScreen('screen-home');
+  });
   $('#btn-upload-retry').addEventListener('click', () => { showUploadScreen(); runUpload(); });
   $('#btn-upload-discard').addEventListener('click', async () => {
     if (!confirm('Discard this recording? This cannot be undone.')) return;
@@ -845,6 +849,21 @@ function stopCameraStream() {
   }
 }
 
+// #record-video gets reused for two different things: the live camera feed while recording,
+// and (via setupVideoPreview below) a normal <video src="blob:..."> playing back what was
+// just recorded, with real audio. Leaving the record screen never explicitly stopped that
+// second mode — the screen just gets hidden with display:none, which doesn't stop an
+// already-playing <video>'s audio. That's what caused sound continuing to play after
+// navigating back to Home with nothing visible on screen.
+function resetRecordVideoElement() {
+  const video = $('#record-video');
+  if (!video) return;
+  video.pause();
+  video.removeAttribute('src');
+  video.srcObject = null;
+  video.load();
+}
+
 // Lets the driver rewatch exactly what they just recorded — with real sound and scrubbing —
 // before committing to upload it. Swaps the same <video> element from live camera feed
 // (srcObject) over to the actual recorded file (src) once every chunk is in.
@@ -860,6 +879,7 @@ function setupVideoPreview() {
   video.controls = true;
   video.autoplay = false;
   video.src = state.previewVideoUrl;
+  fixBrokenDuration(video);
 }
 
 function revokePreviewUrl() {
@@ -1597,6 +1617,26 @@ async function renderEntryCard(r, showDriver) {
   return card;
 }
 
+// Safari's MediaRecorder writes MP4s (and Chrome's writes WebMs) with broken duration
+// metadata — a documented Safari bug where the moov atom's duration fields all report 0.
+// That breaks both the reported length and the ability to seek at all (forward-seeking has
+// nowhere valid to land, so it resets to 0). Well-known workaround: forcing a seek to a huge
+// timestamp makes the browser actually scan the file to find the real end, fixing both.
+// Harmless no-op if the duration was already fine.
+function fixBrokenDuration(video) {
+  const tryFix = () => {
+    if (Number.isFinite(video.duration) && video.duration > 0) return;
+    const onTimeUpdate = () => {
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.currentTime = 0;
+    };
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.currentTime = 1e101;
+  };
+  if (video.readyState >= 1) tryFix();
+  else video.addEventListener('loadedmetadata', tryFix, { once: true });
+}
+
 async function loadCardVideo(card) {
   const video = card.querySelector('.entry-video-wrap video');
   const loadingEl = card.querySelector('.entry-video-loading');
@@ -1613,6 +1653,7 @@ async function loadCardVideo(card) {
     video.src = objectUrl;
     video.style.display = 'block';
     if (loadingEl) loadingEl.style.display = 'none';
+    fixBrokenDuration(video);
   } catch (err) {
     console.error('Could not load video', err);
     if (loadingEl) loadingEl.textContent = 'Could not load video — check your connection and try again.';

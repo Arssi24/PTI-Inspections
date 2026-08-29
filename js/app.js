@@ -2,7 +2,10 @@
    Backend: Supabase (Postgres + Auth + Storage) — see supabase/schema.sql and js/supabaseClient.js.
    Every fleet's data is isolated by Row Level Security, keyed on fleet_code. */
 
-const MIN_SECONDS = { PTI: 4 * 60, HOOK: 60, DROP: 60 };
+// The minimum length enforcement itself stays fully active — this is just the config for it,
+// not shown on-screen to drivers anymore (per the uncle's request), but still blocks Save &
+// Upload if a recording comes in short. PTI lowered to 3:30 per his request.
+const MIN_SECONDS = { PTI: 3.5 * 60, HOOK: 60, DROP: 60 };
 
 const state = {
   role: 'driver',

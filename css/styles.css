@@ -2,14 +2,18 @@
   --navy: #2a2f50;
   --navy-dark: #1a1d33;
   --navy-darker: #12141f;
-  --primary: #7b5fe8;
-  --primary-dark: #5b3fd6;
-  --primary-light: #f0ecfc;
-  --primary-gradient: linear-gradient(135deg, #8f74ec, #5b3fd6);
+  /* Flat navy theme — no gradients, no cyan, per the uncle's request. --primary-gradient
+     keeps its name (used throughout as a `background` value) but is now a plain solid
+     color, not an actual gradient — that was the simplest way to make every button/card
+     that referenced it go flat without touching each rule individually. */
+  --primary: #2a2f50;
+  --primary-dark: #1a1d33;
+  --primary-light: #e8eaf0;
+  --primary-gradient: #2a2f50;
   --steel: #5b7bb8;
   --red: #c0392b;
   --green: #1e9e5a;
-  --cyan: #0891b2;
+  --amber: #d6901e;
   --purple-drop: #8b3fd6;
   --bg: #f4f6fa;
   --card: #ffffff;
@@ -44,12 +48,12 @@ html, body {
 /* ---------- iOS/Android safe-area status bar strip ---------- */
 /* On phones with a notch/dynamic island, the OS status bar (clock, battery, signal) floats
    on top of the page content unless we reserve real space for it. This fixed strip gives it
-   a branded cyan backdrop instead of colliding with whatever's underneath. */
+   a branded navy backdrop instead of colliding with whatever's underneath. */
 body::before {
   content: '';
   position: fixed; top: 0; left: 0; right: 0;
   height: env(safe-area-inset-top);
-  background: linear-gradient(135deg, #4dd8ec, #0891b2);
+  background: var(--navy);
   z-index: 999;
 }
 
@@ -69,9 +73,9 @@ body::before {
 .brand-block { text-align: center; margin-top: 40px; }
 .brand-mark {
   width: 64px; height: 64px; border-radius: 18px;
-  background: linear-gradient(135deg, #4dd8ec, #0891b2);
-  box-shadow: 0 6px 16px rgba(8,145,178,0.32);
-  color: var(--navy); font-weight: 800; font-size: 19px; font-style: italic;
+  background: var(--navy);
+  box-shadow: 0 6px 16px rgba(42,47,80,0.32);
+  color: #fff; font-weight: 800; font-size: 19px; font-style: italic;
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto 14px; letter-spacing: 0.5px;
 }
@@ -199,9 +203,9 @@ body::before {
   transition: transform 0.1s ease;
 }
 .mode-card:active { filter: brightness(0.94); transform: scale(0.99); }
-.mode-card[data-type="PTI"] { background: linear-gradient(135deg, #4dd8ec, #0891b2); }
-.mode-card[data-type="HOOK"] { background: linear-gradient(135deg, #4dd8ec, #0891b2); }
-.mode-card[data-type="DROP"] { background: linear-gradient(135deg, #4dd8ec, #0891b2); }
+.mode-card[data-type="PTI"],
+.mode-card[data-type="HOOK"],
+.mode-card[data-type="DROP"] { background: var(--navy); }
 .mode-icon {
   width: 44px; height: 44px; flex-shrink: 0; color: #fff;
   background: rgba(255,255,255,0.22); border-radius: 12px;
@@ -335,7 +339,7 @@ body::before {
   font-size: 11px; font-weight: 800; letter-spacing: 0.5px; padding: 3px 9px; border-radius: 999px; color: #fff;
 }
 .entry-type.PTI { background: var(--green); }
-.entry-type.HOOK { background: var(--cyan); }
+.entry-type.HOOK { background: var(--amber); }
 .entry-type.DROP { background: var(--purple-drop); }
 .entry-unit { font-weight: 700; font-size: 14.5px; }
 .entry-meta { font-size: 12.5px; color: var(--text-mute); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }

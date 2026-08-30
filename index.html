@@ -262,51 +262,52 @@
     </div>
   </section>
 
-  <!-- ============ RECORDING ============ -->
+  <!-- ============ RECORDING (hands off to the phone's real Camera app, then reviews
+       the result here — tap-to-flag now happens by scrubbing to a moment and tapping,
+       rather than live during recording) ============ -->
   <section class="screen" id="screen-record" data-screen>
-    <div class="record-stage">
-      <video id="record-video" playsinline muted autoplay></video>
-      <canvas id="record-canvas" style="display:none;"></canvas>
-      <div id="marker-layer" class="marker-layer"></div>
-
-      <div class="record-topbar">
-        <button class="icon-btn light" data-back="screen-home" id="btn-record-close">
+    <div class="phone-shell">
+      <header class="top-bar">
+        <button class="icon-btn" data-back="screen-home" id="btn-record-close">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        <div class="record-badge" id="record-type-badge">PTI</div>
-        <div class="record-unit-badge" id="record-unit-badge">TRK-104</div>
-        <button class="icon-btn light" id="btn-torch-toggle" title="Toggle flashlight" style="display:none;">
-          <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
-        </button>
+        <div class="hello" id="record-title">PTI</div>
+        <div style="width:36px"></div>
+      </header>
+
+      <div id="recorder-launching" class="card" style="text-align:center;">
+        <p style="margin:8px 0;">Record your walkaround using your phone's camera, then come back here to review it and flag anything you saw.</p>
+        <button class="btn btn-primary btn-block" id="btn-open-camera-retry">Open Camera</button>
       </div>
 
-      <div class="record-timer-wrap">
-        <div class="record-timer" id="record-timer">0:00</div>
-        <div class="record-min" id="record-min-req" style="display:none;">min 4:00</div>
+      <div id="recorder-review" style="display:none;">
+        <div class="review-video-wrap">
+          <video id="record-video" controls playsinline></video>
+          <div class="review-tap-overlay" id="review-tap-overlay" style="display:none;"></div>
+        </div>
+        <canvas id="record-canvas" style="display:none;"></canvas>
+        <div class="review-arm-hint" id="review-arm-hint" style="display:none;">Tap on the video, right where you see the issue</div>
+
         <div class="record-location" id="record-location">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           <span id="record-location-text">Locating…</span>
         </div>
-      </div>
 
-      <div class="camera-warning" id="camera-warning" style="display:none;">Camera/microphone permission is required to record. Check your browser/device settings and try again.</div>
-
-      <div class="record-bottom">
         <div class="defect-count" id="defect-count-wrap" style="visibility:hidden;">
           <span id="defect-count">0</span> defect photo(s) flagged
         </div>
 
-        <div class="record-controls" id="controls-live">
-          <button class="record-btn" id="btn-record-toggle"><span class="record-dot"></span></button>
-        </div>
+        <button class="btn btn-secondary btn-block" id="btn-flag-defect">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          Flag Defect at Current Moment
+        </button>
 
-        <div class="record-controls-stopped" id="controls-stopped" style="display:none;">
-          <div class="rewatch-hint">Rewatch it above before uploading</div>
-          <div class="min-warning" id="min-warning" style="display:none;">Recording is shorter than the required minimum. Please retake.</div>
-          <button class="btn btn-outline-light btn-block" id="btn-retake">Delete &amp; Retake</button>
-          <button class="btn btn-primary btn-block" id="btn-save-upload">Upload Video</button>
-        </div>
+        <div class="min-warning" id="min-warning" style="display:none;">This video is shorter than the required minimum. Please retake.</div>
+        <button class="btn btn-secondary btn-block" id="btn-retake">Delete &amp; Retake</button>
+        <button class="btn btn-primary btn-block" id="btn-save-upload">Upload Video</button>
       </div>
+
+      <input type="file" id="native-camera-input" accept="video/*" capture="environment" style="display:none;" />
     </div>
   </section>
 

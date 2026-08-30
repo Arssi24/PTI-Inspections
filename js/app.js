@@ -24,15 +24,12 @@ const state = {
   currentUnit: null,
   currentLocation: null,
   scanTargetTitle: '',
-  recorder: null,
-  recordedChunks: [],
+  recordedVideoBlob: null,
+  recordedVideoDurationSec: 0,
+  defectTapArmed: false,
   previewVideoUrl: null,
-  stream: null,
   scanStream: null,
   scanLoopHandle: null,
-  timerHandle: null,
-  startedAt: null,
-  elapsedSec: 0,
   defects: [],
   finalDurationSec: 0,
   dashRange: 'today',
@@ -191,15 +188,16 @@ async function init() {
   $$('[data-back]').forEach((btn) => {
     btn.addEventListener('click', () => {
       stopScanLoop();
-      stopCameraStream();
       resetRecordVideoElement();
       showScreen(btn.dataset.back);
     });
   });
 
   $('#btn-manual-submit').addEventListener('click', onManualUnitSubmit);
-  $('#btn-record-toggle').addEventListener('click', onRecordToggle);
-  $('#btn-torch-toggle').addEventListener('click', onToggleTorch);
+  $('#btn-open-camera-retry').addEventListener('click', openNativeCamera);
+  $('#native-camera-input').addEventListener('change', onNativeVideoSelected);
+  $('#btn-flag-defect').addEventListener('click', onFlagDefectToggle);
+  $('#review-tap-overlay').addEventListener('click', onReviewTapOverlay);
   $('#btn-retake').addEventListener('click', onRetake);
   $('#btn-save-upload').addEventListener('click', onSaveUpload);
   $('#btn-upload-done').addEventListener('click', () => {
@@ -219,9 +217,6 @@ async function init() {
   });
   $('#btn-retry-pending').addEventListener('click', retryOldestPendingUpload);
   window.addEventListener('online', () => { if (state.role === 'driver') checkPendingUploads(); });
-
-  $('#record-video').parentElement.querySelector('#marker-layer').addEventListener('click', onTapFlag);
-  $('.record-stage').addEventListener('click', onTapFlag);
 
   // Only the plain range chips (data-range attribute) use this click-to-select pattern.
   // The date input is its own real, normally-rendered control — see its CSS comment.
@@ -676,73 +671,107 @@ function onUnitScanned(rawCode) {
 }
 
 /* ---------------- recording screen ---------------- */
+// Recording itself happens in the phone's real Camera app now, not our own live camera view —
+// that's the actual fix for videos that played a few seconds then errored out. The browser's
+// MediaRecorder API writes broken duration/seek metadata into whatever it records; the real
+// Camera app doesn't have that bug. This screen hands off to it, then reviews the result and
+// lets the driver flag defects by scrubbing to a moment and tapping (armed via the flag
+// button below, same one-tap-to-arm pattern the old flashlight toggle used).
 
 async function enterRecordScreen() {
   showScreen('screen-record');
-  $('#record-type-badge').textContent = state.currentType;
-  $('#record-unit-badge').textContent = state.currentUnit;
-  $('#record-min-req').textContent = `min ${fmtTime(MIN_SECONDS[state.currentType])}`;
-  $('#record-timer').textContent = '0:00';
-  $('#controls-live').style.display = 'flex';
-  $('#controls-stopped').style.display = 'none';
-  $('#btn-record-toggle').classList.remove('recording');
-  $('#btn-record-toggle').disabled = false;
-  $('#camera-warning').style.display = 'none';
+  $('#record-title').textContent = `${state.currentType} · ${state.currentUnit}`;
+  $('#recorder-launching').style.display = 'block';
+  $('#recorder-review').style.display = 'none';
   $('#defect-count-wrap').style.visibility = 'hidden';
   $('#defect-count').textContent = '0';
-  $('#marker-layer').innerHTML = '';
+  $('#min-warning').style.display = 'none';
+  disarmDefectTap();
   state.defects = [];
-  state.recordedChunks = [];
-  state.elapsedSec = 0;
+  state.recordedVideoBlob = null;
+  state.recordedVideoDurationSec = 0;
   state.currentLocation = null;
   captureLocation();
+  revokePreviewUrl();
+  resetRecordVideoElement();
+}
 
-  $('#btn-torch-toggle').style.display = 'none';
-  $('#btn-torch-toggle').classList.remove('active');
-  state.torchOn = false;
+function openNativeCamera() {
+  // Requires a direct user tap to reliably open on iOS — that's why this is its own explicit
+  // button rather than auto-firing, since a QR-code scan detection isn't a real user gesture
+  // and Safari can silently block the camera picker if it's triggered that way.
+  $('#native-camera-input').value = ''; // cleared so picking the same result again still fires 'change'
+  $('#native-camera-input').click();
+}
+
+async function onNativeVideoSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
 
   const video = $('#record-video');
   revokePreviewUrl();
-  video.src = '';
-  video.removeAttribute('src');
-  video.controls = false;
-  video.muted = true;
-  video.autoplay = true;
-  $('#camera-warning').style.display = 'none';
-  try {
-    state.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: true,
-    });
-    video.srcObject = state.stream;
-    await video.play();
-    setUpTorchIfAvailable();
-  } catch (err) {
-    console.warn('Camera/mic permission denied:', err);
-    $('#camera-warning').style.display = 'block';
-    $('#btn-record-toggle').disabled = true;
-  }
+  state.previewVideoUrl = URL.createObjectURL(file);
+  video.src = state.previewVideoUrl;
+  video.controls = true;
+  fixBrokenDuration(video);
+
+  await new Promise((resolve) => {
+    if (video.readyState >= 1) resolve();
+    else video.addEventListener('loadedmetadata', resolve, { once: true });
+  });
+
+  state.recordedVideoBlob = file;
+  state.recordedVideoDurationSec = Number.isFinite(video.duration) ? video.duration : 0;
+  state.finalDurationSec = state.recordedVideoDurationSec;
+
+  const min = MIN_SECONDS[state.currentType];
+  const tooShort = state.recordedVideoDurationSec > 0 && state.recordedVideoDurationSec < min;
+  $('#min-warning').style.display = tooShort ? 'block' : 'none';
+  $('#btn-save-upload').disabled = tooShort;
+
+  $('#recorder-launching').style.display = 'none';
+  $('#recorder-review').style.display = 'block';
 }
 
-function setUpTorchIfAvailable() {
-  const track = state.stream && state.stream.getVideoTracks()[0];
-  const caps = track && track.getCapabilities ? track.getCapabilities() : null;
-  if (caps && caps.torch) {
-    $('#btn-torch-toggle').style.display = 'flex';
-  }
+function onFlagDefectToggle() {
+  if (state.defectTapArmed) { disarmDefectTap(); return; }
+  const video = $('#record-video');
+  video.pause();
+  state.defectTapArmed = true;
+  $('#btn-flag-defect').classList.add('active');
+  $('#review-arm-hint').style.display = 'block';
+  $('#review-tap-overlay').style.display = 'block';
 }
 
-async function onToggleTorch() {
-  const track = state.stream && state.stream.getVideoTracks()[0];
-  if (!track) return;
-  state.torchOn = !state.torchOn;
-  try {
-    await track.applyConstraints({ advanced: [{ torch: state.torchOn }] });
-    $('#btn-torch-toggle').classList.toggle('active', state.torchOn);
-  } catch (err) {
-    console.warn('Torch toggle failed:', err);
-    state.torchOn = false;
-  }
+function disarmDefectTap() {
+  state.defectTapArmed = false;
+  const flagBtn = $('#btn-flag-defect');
+  if (flagBtn) flagBtn.classList.remove('active');
+  const hint = $('#review-arm-hint');
+  if (hint) hint.style.display = 'none';
+  const overlay = $('#review-tap-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function onReviewTapOverlay(e) {
+  if (!state.defectTapArmed) return;
+  const overlay = $('#review-tap-overlay');
+  const rect = overlay.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const xPct = (clientX - rect.left) / rect.width;
+  const yPct = (clientY - rect.top) / rect.height;
+
+  playShutterSound();
+  const dot = document.createElement('div');
+  dot.className = 'marker-dot';
+  dot.style.left = (clientX - rect.left) + 'px';
+  dot.style.top = (clientY - rect.top) + 'px';
+  overlay.appendChild(dot);
+  setTimeout(() => dot.remove(), 550);
+
+  capturePhotoWithMarker(xPct, yPct);
+  disarmDefectTap();
 }
 
 function captureLocation() {
@@ -770,116 +799,16 @@ function captureLocation() {
   );
 }
 
-function pickMimeType() {
-  const candidates = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-    'video/mp4',
-  ];
-  for (const c of candidates) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return '';
-}
-
-function onRecordToggle() {
-  const btn = $('#btn-record-toggle');
-  const isRecording = btn.classList.contains('recording');
-  if (!isRecording) {
-    startRecording();
-    btn.classList.add('recording');
-  } else {
-    stopRecording();
-  }
-}
-
-function startRecording() {
-  if (!state.stream) return;
-  const mimeType = pickMimeType();
-  try {
-    state.recorder = mimeType ? new MediaRecorder(state.stream, { mimeType }) : new MediaRecorder(state.stream);
-  } catch (err) {
-    state.recorder = new MediaRecorder(state.stream);
-  }
-  state.recordedChunks = [];
-  state.recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) state.recordedChunks.push(e.data); };
-  state.recorder.onstop = setupVideoPreview;
-  // No timeslice argument — this is deliberate. Requesting data every 500ms produces many
-  // small fragments that get concatenated into the final blob, and on iOS Safari that
-  // fragmented result can play (leniently) in the very <video> tag that recorded it, while
-  // stricter consumers like Photos or CapCut reject it as an invalid/unfinalized file —
-  // exactly "plays a few seconds then errors, won't import elsewhere." Recording as one
-  // continuous stream and only pulling data when it actually stops produces a single, cleanly
-  // finalized file instead.
-  state.recorder.start();
-
-  state.startedAt = Date.now();
-  state.elapsedSec = 0;
-  state.timerHandle = setInterval(() => {
-    state.elapsedSec = (Date.now() - state.startedAt) / 1000;
-    $('#record-timer').textContent = fmtTime(state.elapsedSec);
-  }, 200);
-}
-
-function stopRecording() {
-  clearInterval(state.timerHandle);
-  state.finalDurationSec = state.elapsedSec;
-  $('#btn-record-toggle').classList.remove('recording');
-
-  if (state.recorder && state.recorder.state !== 'inactive') {
-    state.recorder.stop();
-  }
-
-  $('#controls-live').style.display = 'none';
-  $('#controls-stopped').style.display = 'block';
-
-  const min = MIN_SECONDS[state.currentType];
-  const tooShort = state.finalDurationSec < min;
-  $('#min-warning').style.display = tooShort ? 'block' : 'none';
-  $('#btn-save-upload').disabled = tooShort;
-
-  stopCameraStream();
-}
-
-function stopCameraStream() {
-  if (state.stream) {
-    state.stream.getTracks().forEach((t) => t.stop());
-    state.stream = null;
-  }
-}
-
-// #record-video gets reused for two different things: the live camera feed while recording,
-// and (via setupVideoPreview below) a normal <video src="blob:..."> playing back what was
-// just recorded, with real audio. Leaving the record screen never explicitly stopped that
-// second mode — the screen just gets hidden with display:none, which doesn't stop an
-// already-playing <video>'s audio. That's what caused sound continuing to play after
-// navigating back to Home with nothing visible on screen.
+// #record-video only ever plays a real file now (src), never a live stream (srcObject) — but
+// still gets explicitly reset between attempts so a previous recording's audio can't keep
+// playing invisibly after navigating away or retaking.
 function resetRecordVideoElement() {
   const video = $('#record-video');
   if (!video) return;
   video.pause();
   video.removeAttribute('src');
-  video.srcObject = null;
+  video.controls = false;
   video.load();
-}
-
-// Lets the driver rewatch exactly what they just recorded — with real sound and scrubbing —
-// before committing to upload it. Swaps the same <video> element from live camera feed
-// (srcObject) over to the actual recorded file (src) once every chunk is in.
-function setupVideoPreview() {
-  const mimeType = state.recorder && state.recorder.mimeType ? state.recorder.mimeType : 'video/webm';
-  const blob = new Blob(state.recordedChunks.slice(), { type: mimeType });
-  if (state.previewVideoUrl) URL.revokeObjectURL(state.previewVideoUrl);
-  state.previewVideoUrl = URL.createObjectURL(blob);
-
-  const video = $('#record-video');
-  video.srcObject = null;
-  video.muted = false;
-  video.controls = true;
-  video.autoplay = false;
-  video.src = state.previewVideoUrl;
-  fixBrokenDuration(video);
 }
 
 function revokePreviewUrl() {
@@ -918,30 +847,6 @@ function playShutterSound() {
   }
 }
 
-function onTapFlag(e) {
-  const btn = $('#btn-record-toggle');
-  if (!btn.classList.contains('recording')) return;
-  if (e.target.closest('.record-bottom')) return; // dead zone around the controls — no accidental flags
-  if (e.target.closest('.record-topbar')) return; // same for the close button/badges up top
-
-  const stage = document.querySelector('.record-stage');
-  const rect = stage.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const xPct = x / rect.width;
-  const yPct = y / rect.height;
-
-  playShutterSound();
-
-  const dot = document.createElement('div');
-  dot.className = 'marker-dot';
-  dot.style.left = x + 'px';
-  dot.style.top = y + 'px';
-  $('#marker-layer').appendChild(dot);
-  setTimeout(() => dot.remove(), 550);
-
-  capturePhotoWithMarker(xPct, yPct);
-}
 
 function capturePhotoWithMarker(xPct, yPct) {
   const video = $('#record-video');
@@ -970,7 +875,9 @@ function capturePhotoWithMarker(xPct, yPct) {
   ctx.globalCompositeOperation = 'source-over';
 
   const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-  state.defects.push({ id: 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), t: state.elapsedSec, x: xPct, y: yPct, photo: dataUrl });
+  // video.currentTime — the exact paused moment being reviewed — not a live-recording timer,
+  // since flagging now happens by scrubbing to a moment afterward, not tapping mid-recording.
+  state.defects.push({ id: 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), t: video.currentTime, x: xPct, y: yPct, photo: dataUrl });
 
   $('#defect-count-wrap').style.visibility = 'visible';
   $('#defect-count').textContent = state.defects.length;
@@ -1055,8 +962,10 @@ async function retryOldestPendingUpload() {
 
 async function onSaveUpload() {
   revokePreviewUrl();
-  const mimeType = state.recorder && state.recorder.mimeType ? state.recorder.mimeType : 'video/webm';
-  const videoExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  // state.recordedVideoBlob is the real file handed back by the phone's Camera app (via
+  // onNativeVideoSelected) — used directly, not reassembled from recorder chunks anymore.
+  const mimeType = (state.recordedVideoBlob && state.recordedVideoBlob.type) || 'video/mp4';
+  const videoExt = mimeType.includes('mp4') || mimeType.includes('quicktime') ? 'mp4' : 'webm';
   pendingUpload = {
     id: newId(),
     type: state.currentType,
@@ -1068,7 +977,7 @@ async function onSaveUpload() {
     location: state.currentLocation,
     durationSec: Math.round(state.finalDurationSec),
     defectsRaw: state.defects,
-    videoBlob: new Blob(state.recordedChunks.slice(), { type: mimeType }),
+    videoBlob: state.recordedVideoBlob,
     videoExt,
   };
   // Persisted to disk BEFORE we even try the network — so a driver with zero signal can

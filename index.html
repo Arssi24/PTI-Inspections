@@ -282,7 +282,7 @@
 
       <div id="recorder-review" style="display:none;">
         <div class="review-video-wrap">
-          <video id="record-video" controls playsinline></video>
+          <video id="record-video" playsinline></video>
           <div class="review-tap-overlay" id="review-tap-overlay" style="display:none;"></div>
         </div>
         <canvas id="record-canvas" style="display:none;"></canvas>
@@ -364,6 +364,10 @@
           <div class="fleet-code-chip" id="fleet-code-chip" title="Give this code to your drivers so their accounts link to your fleet">
             Fleet code: <strong id="fleet-code-value">—</strong>
           </div>
+          <button class="logout-btn pill-btn" id="btn-manage-fleets" title="Switch between your fleets or start a new one">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            Fleets
+          </button>
           <button class="logout-btn" id="btn-logout-dash" title="Log out">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Log Out
@@ -427,6 +431,40 @@
         <div class="dash-stats" id="drivers-stats"></div>
         <p class="demo-note">Everyone who's signed up with your fleet code, whether or not they've submitted an inspection yet.</p>
         <div id="drivers-list" class="entry-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MANAGE FLEETS ============ -->
+  <section class="screen" id="screen-fleets" data-screen>
+    <div class="dashboard">
+      <header class="dash-header">
+        <div>
+          <div class="dash-title">Your Fleets</div>
+          <div class="dash-sub">Switch which fleet the dashboard shows, or start a new one</div>
+        </div>
+        <button class="logout-btn pill-btn" data-back="screen-dashboard" type="button">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Back
+        </button>
+      </header>
+
+      <div class="fleets-active-note" id="fleets-active-note">Active fleet: <strong>—</strong></div>
+
+      <div id="fleets-list" class="entry-list"></div>
+
+      <div class="card fleet-action-card">
+        <label class="field-label">Switch to another fleet by code</label>
+        <input class="field" type="text" id="fleet-join-code" placeholder="e.g. F7K2P9" autocomplete="off" autocapitalize="characters" />
+        <div class="field-error" id="fleet-join-error" style="display:none;"></div>
+        <button class="btn btn-secondary btn-block" id="btn-fleet-join" type="button">Switch to this fleet</button>
+      </div>
+
+      <div class="card fleet-action-card">
+        <label class="field-label">Start a new fleet</label>
+        <input class="field" type="text" id="fleet-new-name" placeholder="Name (optional) — e.g. North Yard" autocomplete="off" />
+        <div class="field-error" id="fleet-new-error" style="display:none;"></div>
+        <button class="btn btn-primary btn-block" id="btn-fleet-create" type="button">Create fleet &amp; switch to it</button>
       </div>
     </div>
   </section>

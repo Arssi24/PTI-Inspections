@@ -102,6 +102,26 @@ async function sbFindFleetByCode(code) {
   return data;
 }
 
+// Fleets this manager created — used to populate the "switch fleet" list. Fleets they only
+// joined by code aren't listed here, but they can always re-enter that code to switch back.
+async function sbGetManagerFleets(managerId) {
+  const { data, error } = await requireSb()
+    .from('fleets')
+    .select('code, name, created_at')
+    .eq('manager_id', managerId)
+    .order('created_at');
+  if (error) throw error;
+  return data;
+}
+
+async function sbSetActiveFleet(code) {
+  return requireSb().rpc('set_active_fleet', { p_code: code });
+}
+
+async function sbCreateFleet(name) {
+  return requireSb().rpc('create_fleet', { p_name: name || '' });
+}
+
 /* ---------------- units ---------------- */
 
 async function sbGetUnits(fleetCode) {

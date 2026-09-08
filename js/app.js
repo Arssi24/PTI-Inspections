@@ -56,6 +56,81 @@ function fmtTime(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// Fully custom play/seek/±15s controls, replacing native <video controls> entirely. iOS
+// Safari's own native skip buttons turned out to reset blob-sourced video back to 0:00
+// instead of actually skipping — that's Apple's player UI, not something fixable from here,
+// so this small player is fully self-implemented instead, guaranteeing consistent behavior
+// everywhere it's used (recording review screen, History/Dashboard entry cards).
+function initCustomVideoPlayer(video) {
+  if (video.dataset.cvpReady) return;
+  video.dataset.cvpReady = '1';
+  video.controls = false;
+  video.removeAttribute('controls');
+
+  const bar = document.createElement('div');
+  bar.className = 'cvp-controls';
+  bar.innerHTML = `
+    <button class="cvp-btn cvp-play" type="button" title="Play/Pause">
+      <svg class="icon cvp-icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+      <svg class="icon cvp-icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    </button>
+    <button class="cvp-btn cvp-skip cvp-back" type="button" title="Back 15 seconds">−15s</button>
+    <input type="range" class="cvp-seek" min="0" max="1000" value="0" step="1" />
+    <button class="cvp-btn cvp-skip cvp-fwd" type="button" title="Forward 15 seconds">+15s</button>
+    <span class="cvp-time">0:00 / 0:00</span>
+  `;
+  video.insertAdjacentElement('afterend', bar);
+
+  const playBtn = bar.querySelector('.cvp-play');
+  const iconPlay = bar.querySelector('.cvp-icon-play');
+  const iconPause = bar.querySelector('.cvp-icon-pause');
+  const seek = bar.querySelector('.cvp-seek');
+  const timeLabel = bar.querySelector('.cvp-time');
+  let dragging = false;
+
+  const safeDuration = () => (Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0);
+
+  function updateTime() {
+    const dur = safeDuration();
+    timeLabel.textContent = `${fmtTime(video.currentTime || 0)} / ${fmtTime(dur)}`;
+    if (!dragging && dur > 0) seek.value = String((video.currentTime / dur) * 1000);
+  }
+  function updatePlayIcon() {
+    iconPlay.style.display = video.paused ? 'block' : 'none';
+    iconPause.style.display = video.paused ? 'none' : 'block';
+  }
+
+  playBtn.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
+  video.addEventListener('play', updatePlayIcon);
+  video.addEventListener('pause', updatePlayIcon);
+  video.addEventListener('ended', updatePlayIcon);
+  video.addEventListener('timeupdate', updateTime);
+  video.addEventListener('loadedmetadata', updateTime);
+  video.addEventListener('durationchange', updateTime);
+
+  seek.addEventListener('input', () => {
+    dragging = true;
+    const dur = safeDuration();
+    if (dur > 0) timeLabel.textContent = `${fmtTime((seek.value / 1000) * dur)} / ${fmtTime(dur)}`;
+  });
+  seek.addEventListener('change', () => {
+    const dur = safeDuration();
+    if (dur > 0) video.currentTime = (seek.value / 1000) * dur;
+    dragging = false;
+  });
+
+  bar.querySelector('.cvp-back').addEventListener('click', () => {
+    video.currentTime = Math.max(0, (video.currentTime || 0) - 15);
+  });
+  bar.querySelector('.cvp-fwd').addEventListener('click', () => {
+    const dur = safeDuration();
+    video.currentTime = dur > 0 ? Math.min(dur, (video.currentTime || 0) + 15) : (video.currentTime || 0) + 15;
+  });
+
+  updatePlayIcon();
+  updateTime();
+}
+
 function escapeHtml(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -179,6 +254,9 @@ async function init() {
   $('#btn-verify-signup-otp').addEventListener('click', onVerifySignupOtp);
   $('#btn-logout').addEventListener('click', logout);
   $('#btn-logout-dash').addEventListener('click', logout);
+  $('#btn-manage-fleets').addEventListener('click', openFleetsScreen);
+  $('#btn-fleet-join').addEventListener('click', onFleetJoinSubmit);
+  $('#btn-fleet-create').addEventListener('click', onFleetCreateSubmit);
   $('#btn-history').addEventListener('click', openHistory);
 
   $$('.mode-card').forEach((card) => {
@@ -712,7 +790,7 @@ async function onNativeVideoSelected(e) {
   revokePreviewUrl();
   state.previewVideoUrl = URL.createObjectURL(file);
   video.src = state.previewVideoUrl;
-  video.controls = true;
+  initCustomVideoPlayer(video);
   fixBrokenDuration(video);
 
   await new Promise((resolve) => {
@@ -756,17 +834,21 @@ function disarmDefectTap() {
 function onReviewTapOverlay(e) {
   if (!state.defectTapArmed) return;
   const overlay = $('#review-tap-overlay');
-  const rect = overlay.getBoundingClientRect();
+  // Coordinates are computed against the <video> element itself, not the overlay div — the
+  // overlay's own box can extend past the video now that the custom controls bar shares the
+  // same wrapper, and marker placement needs to stay accurate to the actual video frame.
+  const video = $('#record-video');
+  const rect = video.getBoundingClientRect();
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-  const xPct = (clientX - rect.left) / rect.width;
-  const yPct = (clientY - rect.top) / rect.height;
+  const xPct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  const yPct = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
 
   playShutterSound();
   const dot = document.createElement('div');
   dot.className = 'marker-dot';
-  dot.style.left = (clientX - rect.left) + 'px';
-  dot.style.top = (clientY - rect.top) + 'px';
+  dot.style.left = (clientX - overlay.getBoundingClientRect().left) + 'px';
+  dot.style.top = (clientY - overlay.getBoundingClientRect().top) + 'px';
   overlay.appendChild(dot);
   setTimeout(() => dot.remove(), 550);
 
@@ -1165,20 +1247,80 @@ async function onAddUnit() {
   renderUnitsList();
 }
 
-function renderQrInto(el, text, size) {
+// Draws the unit number in a white badge in the dead centre of a rendered QR canvas, so a
+// stack of freshly printed codes can be told apart at a glance without scanning each one.
+// Only used when a label is passed; error-correction is bumped to H in that case so the
+// covered centre still scans fine.
+function drawQrCenterLabel(canvas, text) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const boxW = Math.max(w * 0.34, 40);
+  const boxH = Math.max(h * 0.19, 20);
+  const x = (w - boxW) / 2;
+  const y = (h - boxH) / 2;
+  const r = Math.min(boxH * 0.28, w * 0.03);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + boxW, y, x + boxW, y + boxH, r);
+  ctx.arcTo(x + boxW, y + boxH, x, y + boxH, r);
+  ctx.arcTo(x, y + boxH, x, y, r);
+  ctx.arcTo(x, y, x + boxW, y, r);
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, w * 0.006);
+  ctx.strokeStyle = '#2a2f50';
+  ctx.stroke();
+  let fs = Math.round(boxH * 0.62);
+  const fontAt = (px) => `700 ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+  ctx.font = fontAt(fs);
+  while (fs > 7 && ctx.measureText(text).width > boxW * 0.86) {
+    fs -= 1;
+    ctx.font = fontAt(fs);
+  }
+  ctx.fillStyle = '#2a2f50';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, h / 2 + 1);
+  ctx.restore();
+}
+
+function renderQrInto(el, text, size, label) {
   el.innerHTML = '';
   if (!window.QRCode) {
     el.textContent = text;
     return;
   }
-  new QRCode(el, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+  const level = label ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M;
+  new QRCode(el, { text, width: size, height: size, correctLevel: level });
+  if (!label) return;
+  // qrcodejs draws the canvas synchronously but then (async) copies it into an <img> it
+  // shows instead. Paint our badge on the canvas now for any synchronous reader
+  // (downloadUnitQr), then re-sync the <img> once after that async copy has run.
+  const applyLabel = () => {
+    const canvas = el.querySelector('canvas');
+    if (!canvas) return;
+    drawQrCenterLabel(canvas, text);
+    const img = el.querySelector('img');
+    if (img) {
+      img.src = canvas.toDataURL('image/png');
+      img.style.display = 'block';
+      canvas.style.display = 'none';
+    }
+  };
+  applyLabel();
+  setTimeout(applyLabel, 60);
 }
 
 function downloadUnitQr(unit) {
   const holder = document.createElement('div');
-  renderQrInto(holder, unit, 500);
+  renderQrInto(holder, unit, 560, unit);
   const canvas = holder.querySelector('canvas');
   if (!canvas) return;
+  drawQrCenterLabel(canvas, unit);
   const link = document.createElement('a');
   link.download = `${unit}-qr-code.png`;
   link.href = canvas.toDataURL('image/png');
@@ -1213,7 +1355,7 @@ async function renderUnitsList() {
         </button>
       </div>
     `;
-    renderQrInto(row.querySelector('.unit-qr-thumb'), u.unit, 56);
+    renderQrInto(row.querySelector('.unit-qr-thumb'), u.unit, 60, u.unit);
     row.querySelector('.unit-download-btn').addEventListener('click', () => downloadUnitQr(u.unit));
     row.querySelector('.unit-remove-btn').addEventListener('click', async () => {
       const kindLabel = u.kind === 'truck' ? 'truck' : 'trailer';
@@ -1322,6 +1464,114 @@ function renderDriverRowEdit(row, d) {
       saveBtn.disabled = false;
     }
   });
+}
+
+/* ---------------- manage fleets (manager runs more than one fleet) ---------------- */
+
+// Points the manager's account at `code` and refreshes the dashboard to that fleet.
+// Everything downstream keys off state.fleetCode / current_fleet_code(), so this is all
+// that "switching fleet" needs.
+function applyActiveFleet(code) {
+  state.fleetCode = code;
+  $('#fleet-code-value').textContent = code;
+  state.dashDriver = '';
+  state.dashUnit = '';
+  state.dashType = '';
+  state.dashRange = 'today';
+  $('#filter-driver-input').value = '';
+  $('#filter-unit-input').value = '';
+  $('#filter-type').value = '';
+  $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
+  const todayChip = $('#filter-time .chip[data-range="today"]');
+  if (todayChip) todayChip.classList.add('active');
+  showScreen('screen-dashboard');
+  switchDashTab('inspections');
+}
+
+async function openFleetsScreen() {
+  $('#fleets-active-note').innerHTML = `Active fleet: <strong>${escapeHtml(state.fleetCode)}</strong>`;
+  $('#fleet-join-code').value = '';
+  $('#fleet-new-name').value = '';
+  $('#fleet-join-error').style.display = 'none';
+  $('#fleet-new-error').style.display = 'none';
+  showScreen('screen-fleets');
+  await renderFleetsList();
+}
+
+async function renderFleetsList() {
+  const list = $('#fleets-list');
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+  let fleets;
+  try {
+    fleets = await sbGetManagerFleets(state.userId);
+  } catch (err) {
+    list.innerHTML = '<div class="empty-state">Could not load your fleets — try again.</div>';
+    return;
+  }
+  // Make sure the currently-active fleet always shows, even if it's one the manager joined
+  // by code rather than created.
+  if (!fleets.some((f) => f.code === state.fleetCode)) {
+    fleets = [{ code: state.fleetCode, name: null }, ...fleets];
+  }
+  list.innerHTML = '';
+  fleets.forEach((f) => {
+    const isActive = f.code === state.fleetCode;
+    const row = document.createElement('div');
+    row.className = 'entry-card fleet-row' + (isActive ? ' is-active' : '');
+    row.innerHTML = `
+      <div>
+        <div class="fleet-row-code">${escapeHtml(f.code)}</div>
+        ${f.name ? `<div class="fleet-row-name">${escapeHtml(f.name)}</div>` : ''}
+      </div>
+      <button class="fleet-switch-btn" type="button" ${isActive ? 'disabled' : ''}>${isActive ? 'Showing now' : 'Switch'}</button>
+    `;
+    if (!isActive) {
+      row.querySelector('.fleet-switch-btn').addEventListener('click', () => switchToFleet(f.code));
+    }
+    list.appendChild(row);
+  });
+}
+
+async function switchToFleet(code) {
+  const { data, error } = await sbSetActiveFleet(code);
+  if (error) {
+    alert(error.message && /not found/i.test(error.message) ? 'That fleet code doesn\'t exist.' : 'Could not switch fleets — try again.');
+    return;
+  }
+  applyActiveFleet(data || code);
+}
+
+async function onFleetJoinSubmit() {
+  const errEl = $('#fleet-join-error');
+  errEl.style.display = 'none';
+  const code = $('#fleet-join-code').value.trim().toUpperCase();
+  if (!code) { showAuthError(errEl, 'Enter a fleet code.'); return; }
+  if (code === state.fleetCode) { showAuthError(errEl, 'That\'s already your active fleet.'); return; }
+  const btn = $('#btn-fleet-join');
+  btn.disabled = true;
+  const { data, error } = await sbSetActiveFleet(code);
+  btn.disabled = false;
+  if (error) {
+    showAuthError(errEl, /not found/i.test(error.message || '') ? 'No fleet has that code — double-check it.' : 'Could not switch — try again.');
+    return;
+  }
+  applyActiveFleet(data || code);
+}
+
+async function onFleetCreateSubmit() {
+  const errEl = $('#fleet-new-error');
+  errEl.style.display = 'none';
+  const name = $('#fleet-new-name').value.trim();
+  const btn = $('#btn-fleet-create');
+  btn.disabled = true;
+  const { data, error } = await sbCreateFleet(name);
+  btn.disabled = false;
+  if (error) {
+    showAuthError(errEl, 'Could not create the fleet — try again.');
+    return;
+  }
+  applyActiveFleet(data);
+  alert(`New fleet created. Its code is ${data} — give this to drivers and other managers so they can join.`);
 }
 
 /* ---------------- fleet manager dashboard ---------------- */
@@ -1446,7 +1696,7 @@ async function renderEntryCard(r, showDriver) {
   const videoHtml = videoUrl
     ? `<div class="entry-video-wrap">
          <div class="entry-video-loading">Loading video…</div>
-         <video controls playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}"></video>
+         <video playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}"></video>
          <div class="entry-video-actions">
            <button class="entry-download-btn" data-video-url="${videoUrl}" data-video-name="${unit}-${r.type}-${r.id}.${videoUrl.includes('.mp4') ? 'mp4' : 'webm'}" type="button">
              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1522,7 +1772,8 @@ async function renderEntryCard(r, showDriver) {
       downloadFile(downloadBtn.dataset.videoUrl, downloadBtn.dataset.videoName, downloadBtn);
     });
   }
-  card.querySelector('video, .entry-video-actions')?.addEventListener('click', (e) => e.stopPropagation());
+  card.querySelector('.entry-video-wrap')?.addEventListener('click', (e) => e.stopPropagation());
+  card.querySelector('.entry-video-actions')?.addEventListener('click', (e) => e.stopPropagation());
   return card;
 }
 
@@ -1560,6 +1811,7 @@ async function loadCardVideo(card) {
     const objectUrl = URL.createObjectURL(blob);
     state.activeVideoObjectUrls.push(objectUrl);
     video.src = objectUrl;
+    initCustomVideoPlayer(video);
     video.style.display = 'block';
     if (loadingEl) loadingEl.style.display = 'none';
     fixBrokenDuration(video);

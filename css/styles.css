@@ -181,33 +181,6 @@ body::before {
 }
 .logout-btn:hover { background: #fdf3f2; border-color: #f3c9c4; color: var(--red); }
 .logout-btn .icon { width: 16px; height: 16px; }
-
-/* Neutral variant of .logout-btn — same pill, but doesn't turn red on hover (used for
-   non-destructive header actions like "Fleets" and "Back"). */
-.pill-btn { color: var(--navy); }
-.pill-btn:hover { background: #eef1f6; border-color: var(--border); color: var(--navy); }
-
-/* ---------- manage fleets screen ---------- */
-.fleets-active-note {
-  font-size: 13px; color: var(--text-mute); margin-bottom: 16px;
-}
-.fleets-active-note strong { color: var(--navy); letter-spacing: 0.5px; }
-.fleet-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-}
-.fleet-row-code { font-weight: 700; color: var(--navy); letter-spacing: 0.5px; }
-.fleet-row-name { font-size: 12.5px; color: var(--text-mute); margin-top: 3px; }
-.fleet-row.is-active .fleet-row-code::after {
-  content: "Active"; margin-left: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.4px;
-  color: #0a7d3b; background: #e6f5ec; border-radius: 6px; padding: 2px 6px; vertical-align: middle;
-}
-.fleet-switch-btn {
-  height: 34px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--border);
-  background: #eef1f6; color: var(--navy); font-size: 12.5px; font-weight: 700; cursor: pointer;
-  white-space: nowrap;
-}
-.fleet-switch-btn:disabled { opacity: 0.45; cursor: default; }
-.fleet-action-card { max-width: 420px; margin-top: 16px; }
 .icon-btn.light.active { background: #f5b93f; border-color: #f5b93f; color: #1a1d33; }
 
 /* ---------- home mode grid ---------- */

@@ -254,9 +254,6 @@ async function init() {
   $('#btn-verify-signup-otp').addEventListener('click', onVerifySignupOtp);
   $('#btn-logout').addEventListener('click', logout);
   $('#btn-logout-dash').addEventListener('click', logout);
-  $('#btn-manage-fleets').addEventListener('click', openFleetsScreen);
-  $('#btn-fleet-join').addEventListener('click', onFleetJoinSubmit);
-  $('#btn-fleet-create').addEventListener('click', onFleetCreateSubmit);
   $('#btn-history').addEventListener('click', openHistory);
 
   $$('.mode-card').forEach((card) => {
@@ -1288,43 +1285,77 @@ function drawQrCenterLabel(canvas, text) {
   ctx.restore();
 }
 
+// Builds a finished QR as a single canvas we fully own — QR modules first, then (when a
+// label is asked for) the unit-number badge painted straight on top. qrcodejs draws its
+// own canvas synchronously; we copy that into ours in the same tick, so there's no timer
+// or <img> hand-off to race against.
+function buildQrCanvas(text, size, withLabel) {
+  const stage = document.createElement('div');
+  const level = withLabel ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M;
+  new QRCode(stage, { text, width: size, height: size, correctLevel: level });
+
+  const out = document.createElement('canvas');
+  out.width = size;
+  out.height = size;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+
+  const srcCanvas = stage.querySelector('canvas');
+  const srcImg = stage.querySelector('img');
+  if (srcCanvas) {
+    ctx.drawImage(srcCanvas, 0, 0, size, size);
+  } else if (srcImg && srcImg.complete && srcImg.naturalWidth) {
+    ctx.drawImage(srcImg, 0, 0, size, size);
+  }
+  if (withLabel) drawQrCenterLabel(out, text);
+  return out;
+}
+
 function renderQrInto(el, text, size, label) {
   el.innerHTML = '';
   if (!window.QRCode) {
     el.textContent = text;
     return;
   }
-  const level = label ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M;
-  new QRCode(el, { text, width: size, height: size, correctLevel: level });
-  if (!label) return;
-  // qrcodejs draws the canvas synchronously but then (async) copies it into an <img> it
-  // shows instead. Paint our badge on the canvas now for any synchronous reader
-  // (downloadUnitQr), then re-sync the <img> once after that async copy has run.
-  const applyLabel = () => {
-    const canvas = el.querySelector('canvas');
-    if (!canvas) return;
-    drawQrCenterLabel(canvas, text);
-    const img = el.querySelector('img');
-    if (img) {
-      img.src = canvas.toDataURL('image/png');
-      img.style.display = 'block';
-      canvas.style.display = 'none';
-    }
-  };
-  applyLabel();
-  setTimeout(applyLabel, 60);
+  const canvas = buildQrCanvas(text, size, !!label);
+  canvas.style.display = 'block';
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  el.appendChild(canvas);
+}
+
+function triggerImageDownload(dataUrl, filename) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 function downloadUnitQr(unit) {
-  const holder = document.createElement('div');
-  renderQrInto(holder, unit, 560, unit);
-  const canvas = holder.querySelector('canvas');
-  if (!canvas) return;
-  drawQrCenterLabel(canvas, unit);
-  const link = document.createElement('a');
-  link.download = `${unit}-qr-code.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  if (!window.QRCode) return;
+  const canvas = buildQrCanvas(unit, 560, true);
+  const filename = `${unit}-qr-code.png`;
+  const dataUrl = canvas.toDataURL('image/png');
+  const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  // iOS Safari ignores <a download> — it just opens the image. Web Share with a real File
+  // is the native "Save to Photos / Files" path there (same reasoning as downloadFile()).
+  if (isIos && navigator.share && canvas.toBlob) {
+    canvas.toBlob((blob) => {
+      if (!blob) { triggerImageDownload(dataUrl, filename); return; }
+      const file = new File([blob], filename, { type: 'image/png' });
+      navigator.share({ files: [file], title: `${unit} QR code` }).catch((err) => {
+        if (err && err.name === 'AbortError') return;
+        triggerImageDownload(dataUrl, filename);
+      });
+    }, 'image/png');
+    return;
+  }
+  triggerImageDownload(dataUrl, filename);
 }
 
 async function renderUnitsList() {
@@ -1464,114 +1495,6 @@ function renderDriverRowEdit(row, d) {
       saveBtn.disabled = false;
     }
   });
-}
-
-/* ---------------- manage fleets (manager runs more than one fleet) ---------------- */
-
-// Points the manager's account at `code` and refreshes the dashboard to that fleet.
-// Everything downstream keys off state.fleetCode / current_fleet_code(), so this is all
-// that "switching fleet" needs.
-function applyActiveFleet(code) {
-  state.fleetCode = code;
-  $('#fleet-code-value').textContent = code;
-  state.dashDriver = '';
-  state.dashUnit = '';
-  state.dashType = '';
-  state.dashRange = 'today';
-  $('#filter-driver-input').value = '';
-  $('#filter-unit-input').value = '';
-  $('#filter-type').value = '';
-  $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
-  const todayChip = $('#filter-time .chip[data-range="today"]');
-  if (todayChip) todayChip.classList.add('active');
-  showScreen('screen-dashboard');
-  switchDashTab('inspections');
-}
-
-async function openFleetsScreen() {
-  $('#fleets-active-note').innerHTML = `Active fleet: <strong>${escapeHtml(state.fleetCode)}</strong>`;
-  $('#fleet-join-code').value = '';
-  $('#fleet-new-name').value = '';
-  $('#fleet-join-error').style.display = 'none';
-  $('#fleet-new-error').style.display = 'none';
-  showScreen('screen-fleets');
-  await renderFleetsList();
-}
-
-async function renderFleetsList() {
-  const list = $('#fleets-list');
-  list.innerHTML = '<div class="empty-state">Loading…</div>';
-  let fleets;
-  try {
-    fleets = await sbGetManagerFleets(state.userId);
-  } catch (err) {
-    list.innerHTML = '<div class="empty-state">Could not load your fleets — try again.</div>';
-    return;
-  }
-  // Make sure the currently-active fleet always shows, even if it's one the manager joined
-  // by code rather than created.
-  if (!fleets.some((f) => f.code === state.fleetCode)) {
-    fleets = [{ code: state.fleetCode, name: null }, ...fleets];
-  }
-  list.innerHTML = '';
-  fleets.forEach((f) => {
-    const isActive = f.code === state.fleetCode;
-    const row = document.createElement('div');
-    row.className = 'entry-card fleet-row' + (isActive ? ' is-active' : '');
-    row.innerHTML = `
-      <div>
-        <div class="fleet-row-code">${escapeHtml(f.code)}</div>
-        ${f.name ? `<div class="fleet-row-name">${escapeHtml(f.name)}</div>` : ''}
-      </div>
-      <button class="fleet-switch-btn" type="button" ${isActive ? 'disabled' : ''}>${isActive ? 'Showing now' : 'Switch'}</button>
-    `;
-    if (!isActive) {
-      row.querySelector('.fleet-switch-btn').addEventListener('click', () => switchToFleet(f.code));
-    }
-    list.appendChild(row);
-  });
-}
-
-async function switchToFleet(code) {
-  const { data, error } = await sbSetActiveFleet(code);
-  if (error) {
-    alert(error.message && /not found/i.test(error.message) ? 'That fleet code doesn\'t exist.' : 'Could not switch fleets — try again.');
-    return;
-  }
-  applyActiveFleet(data || code);
-}
-
-async function onFleetJoinSubmit() {
-  const errEl = $('#fleet-join-error');
-  errEl.style.display = 'none';
-  const code = $('#fleet-join-code').value.trim().toUpperCase();
-  if (!code) { showAuthError(errEl, 'Enter a fleet code.'); return; }
-  if (code === state.fleetCode) { showAuthError(errEl, 'That\'s already your active fleet.'); return; }
-  const btn = $('#btn-fleet-join');
-  btn.disabled = true;
-  const { data, error } = await sbSetActiveFleet(code);
-  btn.disabled = false;
-  if (error) {
-    showAuthError(errEl, /not found/i.test(error.message || '') ? 'No fleet has that code — double-check it.' : 'Could not switch — try again.');
-    return;
-  }
-  applyActiveFleet(data || code);
-}
-
-async function onFleetCreateSubmit() {
-  const errEl = $('#fleet-new-error');
-  errEl.style.display = 'none';
-  const name = $('#fleet-new-name').value.trim();
-  const btn = $('#btn-fleet-create');
-  btn.disabled = true;
-  const { data, error } = await sbCreateFleet(name);
-  btn.disabled = false;
-  if (error) {
-    showAuthError(errEl, 'Could not create the fleet — try again.');
-    return;
-  }
-  applyActiveFleet(data);
-  alert(`New fleet created. Its code is ${data} — give this to drivers and other managers so they can join.`);
 }
 
 /* ---------------- fleet manager dashboard ---------------- */

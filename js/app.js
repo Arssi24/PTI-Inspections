@@ -1244,55 +1244,13 @@ async function onAddUnit() {
   renderUnitsList();
 }
 
-// Draws the unit number in a white badge in the dead centre of a rendered QR canvas, so a
-// stack of freshly printed codes can be told apart at a glance without scanning each one.
-// Only used when a label is passed; error-correction is bumped to H in that case so the
-// covered centre still scans fine.
-function drawQrCenterLabel(canvas, text) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  const boxW = Math.max(w * 0.34, 40);
-  const boxH = Math.max(h * 0.19, 20);
-  const x = (w - boxW) / 2;
-  const y = (h - boxH) / 2;
-  const r = Math.min(boxH * 0.28, w * 0.03);
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + boxW, y, x + boxW, y + boxH, r);
-  ctx.arcTo(x + boxW, y + boxH, x, y + boxH, r);
-  ctx.arcTo(x, y + boxH, x, y, r);
-  ctx.arcTo(x, y, x + boxW, y, r);
-  ctx.closePath();
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-  ctx.lineWidth = Math.max(1, w * 0.006);
-  ctx.strokeStyle = '#2a2f50';
-  ctx.stroke();
-  let fs = Math.round(boxH * 0.62);
-  const fontAt = (px) => `700 ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
-  ctx.font = fontAt(fs);
-  while (fs > 7 && ctx.measureText(text).width > boxW * 0.86) {
-    fs -= 1;
-    ctx.font = fontAt(fs);
-  }
-  ctx.fillStyle = '#2a2f50';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, w / 2, h / 2 + 1);
-  ctx.restore();
-}
-
-// Builds a finished QR as a single canvas we fully own — QR modules first, then (when a
-// label is asked for) the unit-number badge painted straight on top. qrcodejs draws its
-// own canvas synchronously; we copy that into ours in the same tick, so there's no timer
-// or <img> hand-off to race against.
-function buildQrCanvas(text, size, withLabel) {
+// Copies qrcodejs's synchronously-drawn output into a canvas we own (no timer / <img>
+// hand-off to race against). Nothing is drawn over the code itself — the in-app scanner is
+// jsQR, which has zero tolerance for anything covering the QR, so the unit number goes on
+// its own strip below the code (see buildLabeledQrCanvas), never on top of it.
+function buildQrCanvas(text, size) {
   const stage = document.createElement('div');
-  const level = withLabel ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M;
-  new QRCode(stage, { text, width: size, height: size, correctLevel: level });
+  new QRCode(stage, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
 
   const out = document.createElement('canvas');
   out.width = size;
@@ -1308,17 +1266,51 @@ function buildQrCanvas(text, size, withLabel) {
   } else if (srcImg && srcImg.complete && srcImg.naturalWidth) {
     ctx.drawImage(srcImg, 0, 0, size, size);
   }
-  if (withLabel) drawQrCenterLabel(out, text);
   return out;
 }
 
-function renderQrInto(el, text, size, label) {
+// QR code with the unit number printed on a white strip *below* it — one image, but nothing
+// overlaps the code, so it scans exactly like a plain QR. Used for the printable download.
+function buildLabeledQrCanvas(text, size) {
+  const qr = buildQrCanvas(text, size);
+  const pad = Math.round(size * 0.06);
+  const bandH = Math.round(size * 0.2);
+  const out = document.createElement('canvas');
+  out.width = size;
+  out.height = size + bandH;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(qr, 0, 0);
+
+  ctx.strokeStyle = '#e4e7ec';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pad, size + 1);
+  ctx.lineTo(size - pad, size + 1);
+  ctx.stroke();
+
+  let fs = Math.round(bandH * 0.6);
+  const fontAt = (px) => `700 ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+  ctx.font = fontAt(fs);
+  while (fs > 10 && ctx.measureText(text).width > size - pad * 2) {
+    fs -= 1;
+    ctx.font = fontAt(fs);
+  }
+  ctx.fillStyle = '#2a2f50';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, size / 2, size + bandH / 2 + 2);
+  return out;
+}
+
+function renderQrInto(el, text, size) {
   el.innerHTML = '';
   if (!window.QRCode) {
     el.textContent = text;
     return;
   }
-  const canvas = buildQrCanvas(text, size, !!label);
+  const canvas = buildQrCanvas(text, size);
   canvas.style.display = 'block';
   canvas.style.width = size + 'px';
   canvas.style.height = size + 'px';
@@ -1336,7 +1328,7 @@ function triggerImageDownload(dataUrl, filename) {
 
 function downloadUnitQr(unit) {
   if (!window.QRCode) return;
-  const canvas = buildQrCanvas(unit, 560, true);
+  const canvas = buildLabeledQrCanvas(unit, 560);
   const filename = `${unit}-qr-code.png`;
   const dataUrl = canvas.toDataURL('image/png');
   const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -1386,7 +1378,7 @@ async function renderUnitsList() {
         </button>
       </div>
     `;
-    renderQrInto(row.querySelector('.unit-qr-thumb'), u.unit, 60, u.unit);
+    renderQrInto(row.querySelector('.unit-qr-thumb'), u.unit, 60);
     row.querySelector('.unit-download-btn').addEventListener('click', () => downloadUnitQr(u.unit));
     row.querySelector('.unit-remove-btn').addEventListener('click', async () => {
       const kindLabel = u.kind === 'truck' ? 'truck' : 'trailer';

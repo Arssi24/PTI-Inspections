@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pti-inspections-v3';
+const CACHE_NAME = 'pti-inspections-v4';
 const CORE_ASSETS = ['./', './index.html', './css/styles.css', './js/app.js', './manifest.json'];
 
 self.addEventListener('install', (event) => {

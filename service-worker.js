@@ -1,8 +1,14 @@
-const CACHE_NAME = 'pti-inspections-v4';
-const CORE_ASSETS = ['./', './index.html', './css/styles.css', './js/app.js', './manifest.json'];
+const CACHE_NAME = 'pti-inspections-v5';
+const CORE_ASSETS = [
+  './', './index.html', './manifest.json', './css/styles.css',
+  './js/app.js', './js/offlineQueue.js', './js/qrcode.min.js', './js/jsQR.min.js',
+  './js/supabase.umd.js', './js/supabase-config.js', './js/supabaseClient.js',
+  './assets/icons/icon-180.png', './assets/icons/icon-192.png', './assets/icons/icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)));
+  // add() per file so one missing file can never abort the whole install
+  event.waitUntil(Promise.allSettled(CORE_ASSETS.map((a) => caches.open(CACHE_NAME).then((c) => c.add(a)))));
   self.skipWaiting();
 });
 
@@ -13,19 +19,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-first for same-origin requests, falling back to cache when offline.
-// Camera/QR CDN scripts and API calls are left untouched (network-only).
+// Stale-while-revalidate: open instantly from the saved copy, refresh it in the background.
+// Cross-origin requests (Supabase API, videos) are left untouched.
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    fetch(event.request)
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(req, { ignoreSearch: req.mode === 'navigate' });
+    const network = fetch(req)
       .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        if (res && res.ok) cache.put(req, res.clone());
         return res;
       })
-      .catch(() => caches.match(event.request))
-  );
+      .catch(() => null);
+    if (cached) {
+      event.waitUntil(network);
+      return cached;
+    }
+    return (await network) || Response.error();
+  })());
 });

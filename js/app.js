@@ -44,6 +44,8 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 function showScreen(id) {
+  const splash = document.getElementById('boot-splash');
+  if (splash) splash.remove();
   $$('.screen').forEach((s) => s.classList.remove('active'));
   const el = document.getElementById(id);
   el.classList.add('active');
@@ -352,6 +354,13 @@ async function init() {
 
   if (isRecoveryLink) return;
 
+  const cachedProfile = readCachedProfile();
+  if (cachedProfile) {
+    loginAs(cachedProfile);
+    verifySessionInBackground(cachedProfile);
+    return;
+  }
+
   let loggedIn = false;
   try {
     // Bounded so a slow/unreachable Supabase project (paused project, dead network, etc.)
@@ -607,7 +616,57 @@ async function tryAutoLogin() {
   return true;
 }
 
+const PROFILE_CACHE_KEY = 'pti_cached_profile';
+
+function readCachedProfile() {
+  try {
+    const hasSession = Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k));
+    if (!hasSession) return null;
+    const p = JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY) || 'null');
+    return p && p.id && p.role ? p : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function cacheProfile(profile) {
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)); } catch (e) { /* storage unavailable */ }
+}
+
+function clearCachedProfile() {
+  try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch (e) { /* storage unavailable */ }
+}
+
+async function verifySessionInBackground(cached) {
+  try {
+    const user = await withTimeout(sbGetSessionUser(), 20000);
+    if (!user || user.id !== cached.id) {
+      if (!navigator.onLine) return;
+      clearCachedProfile();
+      showScreen('screen-login');
+      return;
+    }
+    const fresh = await withTimeout(sbGetProfile(user.id), 20000);
+    if (!fresh) {
+      clearCachedProfile();
+      showScreen('screen-login');
+      return;
+    }
+    cacheProfile(fresh);
+    if (fresh.role !== cached.role || fresh.fleet_code !== cached.fleet_code) {
+      location.reload();
+      return;
+    }
+    state.driverName = fresh.name;
+    state.driverEmail = fresh.email;
+    state.driverPhone = fresh.phone || '';
+  } catch (err) {
+    console.warn('Background session check failed (likely offline) — staying on cached profile', err);
+  }
+}
+
 async function loginAs(profile) {
+  cacheProfile(profile);
   state.userId = profile.id;
   state.driverName = profile.name;
   state.driverEmail = profile.email;
@@ -633,6 +692,7 @@ async function loginAs(profile) {
 }
 
 async function logout() {
+  clearCachedProfile();
   await sbSignOut();
   showScreen('screen-login');
 }

@@ -390,6 +390,11 @@ body::before {
   border-radius: 50%; animation: spin 0.9s linear infinite;
 }
 
+.rec-diag { margin: 8px 0; font-size: 12px; color: var(--text-mute); }
+.rec-diag summary { cursor: pointer; font-weight: 700; text-align: center; }
+.rec-diag-btns { display: flex; gap: 8px; margin: 8px 0; }
+.rec-diag-btns .btn { flex: 1; padding: 9px 6px; font-size: 13px; }
+.rec-diag pre { white-space: pre-wrap; word-break: break-word; background: #f2f4f8; border-radius: 8px; padding: 8px; font-size: 11px; line-height: 1.4; color: #333; }
 .video-info { font-size: 12px; color: var(--text-mute); text-align: center; margin: 6px 0 2px; }
 .video-info:empty { display: none; }
 .video-info-low { color: #b45309; font-weight: 700; }

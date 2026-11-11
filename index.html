@@ -330,6 +330,14 @@
         <div class="review-arm-hint" id="review-arm-hint" style="display:none;">Video paused. Tap on the video, right where you see the issue.</div>
 
         <div class="video-info" id="video-info"></div>
+        <details class="rec-diag" id="rec-diag" style="display:none;">
+          <summary>Recording details</summary>
+          <div class="rec-diag-btns">
+            <button type="button" class="btn btn-secondary" id="btn-play-raw">Play original</button>
+            <button type="button" class="btn btn-secondary" id="btn-play-rebuilt">Play rebuilt</button>
+          </div>
+          <pre id="rec-diag-text"></pre>
+        </details>
 
         <div class="record-location" id="record-location">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>

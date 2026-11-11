@@ -170,17 +170,21 @@ async function onLiveRecorderStopped() {
 
   let chosen = null;
   let rebuilt = null;
+  const diag = { used: '', rawInfo: '', rebuiltInfo: '', rebuiltCheck: 'not run', rawCheck: 'not run', rebuildError: '', rawMime: mime, rawKB: Math.round(raw.size / 1024) };
   try {
     rebuilt = await repairMp4(raw);
     const check = await verifyPlayable(rebuilt);
+    diag.rebuiltCheck = JSON.stringify(check);
     // A timeout is inconclusive (some browsers won't preload an unattached video), not a failure.
     if (check.ok || check.reason === 'timeout') chosen = rebuilt;
     else console.warn('Rebuilt video failed playback check', check);
   } catch (err) {
     console.warn('Video rebuild failed:', err);
+    diag.rebuildError = String(err && err.message ? err.message : err);
   }
   if (!chosen) {
     const rawCheck = await verifyPlayable(raw);
+    diag.rawCheck = JSON.stringify(rawCheck);
     if (rawCheck.ok) chosen = raw;
   }
   if (!chosen) {
@@ -188,7 +192,75 @@ async function onLiveRecorderStopped() {
     if (!keep) { enterRecordScreen(); return; }
     chosen = rebuilt || raw;
   }
+  diag.used = chosen === rebuilt ? 'rebuilt' : 'original';
+  diag.rawInfo = await describeMp4(raw);
+  diag.rebuiltInfo = rebuilt ? await describeMp4(rebuilt) : '(none)';
+  state.liveDiag = diag;
+  state.liveRawBlob = raw;
+  state.liveRebuiltBlob = rebuilt;
   await loadRecordedFile(new File([chosen], 'walkaround.mp4', { type: 'video/mp4' }));
+  renderRecordingDiag();
+}
+
+/* ---- "Recording details" panel on the review screen ---- */
+
+const PLAYER_EVENTS = [];
+
+function logPlayerEvent(text) {
+  const v = $('#record-video');
+  PLAYER_EVENTS.push(`${v ? v.currentTime.toFixed(1) : '?'}s ${text}`);
+  if (PLAYER_EVENTS.length > 14) PLAYER_EVENTS.shift();
+  refreshDiagText();
+}
+
+function initPlayerEventLog() {
+  const v = $('#record-video');
+  ['error', 'stalled', 'waiting', 'ended', 'abort', 'emptied'].forEach((ev) => {
+    v.addEventListener(ev, () => {
+      const err = ev === 'error' && v.error ? ` code=${v.error.code} ${v.error.message || ''}` : '';
+      logPlayerEvent(ev + err);
+    });
+  });
+}
+
+function refreshDiagText() {
+  const el = $('#rec-diag-text');
+  const d = state.liveDiag;
+  if (!el || !d) return;
+  el.textContent = [
+    `Uploading: ${d.used}`,
+    `Recorder format: ${d.rawMime} (${d.rawKB} KB)`,
+    d.rebuildError ? `Rebuild error: ${d.rebuildError}` : `Rebuilt check: ${d.rebuiltCheck}`,
+    d.rawCheck !== 'not run' ? `Original check: ${d.rawCheck}` : '',
+    '',
+    'ORIGINAL FILE:', d.rawInfo,
+    '',
+    'REBUILT FILE:', d.rebuiltInfo,
+    '',
+    'PLAYER EVENTS:', PLAYER_EVENTS.join('\n') || '(none)',
+  ].filter((x) => x !== '').join('\n');
+}
+
+function renderRecordingDiag() {
+  const box = $('#rec-diag');
+  if (!box || !state.liveDiag) return;
+  box.style.display = 'block';
+  PLAYER_EVENTS.length = 0;
+  refreshDiagText();
+}
+
+function playDiagVersion(which) {
+  const blob = which === 'raw' ? state.liveRawBlob : state.liveRebuiltBlob;
+  if (!blob) { alert('That version is not available.'); return; }
+  const v = $('#record-video');
+  revokePreviewUrl();
+  state.previewVideoUrl = URL.createObjectURL(blob);
+  v.src = state.previewVideoUrl;
+  state.recordedVideoBlob = new File([blob], 'walkaround.mp4', { type: 'video/mp4' });
+  state.liveDiag.used = which === 'raw' ? 'original' : 'rebuilt';
+  PLAYER_EVENTS.length = 0;
+  logPlayerEvent(`switched to ${which}`);
+  v.play().catch(() => {});
 }
 
 /* ---- marking a problem while recording ---- */

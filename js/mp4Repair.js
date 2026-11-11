@@ -91,6 +91,34 @@ async function repairMp4(blob) {
   return new Blob([options.target.buffer], { type: 'video/mp4' });
 }
 
+// One-line summary of an MP4's structure, for the on-screen "Recording details" panel.
+async function describeMp4(blob) {
+  try {
+    const buf = await blob.arrayBuffer();
+    buf.fileStart = 0;
+    const u8 = new Uint8Array(buf);
+    const boxes = [];
+    for (let p = 0; p + 8 <= u8.length && boxes.length < 14;) {
+      const sz = ((u8[p] << 24) | (u8[p + 1] << 16) | (u8[p + 2] << 8) | u8[p + 3]) >>> 0;
+      boxes.push(String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]));
+      if (sz < 8) break;
+      p += sz;
+    }
+    const f = MP4Box.createFile();
+    const info = await new Promise((res, rej) => {
+      f.onReady = res;
+      f.onError = rej;
+      f.appendBuffer(buf);
+      f.flush();
+      setTimeout(() => rej(new Error('no moov found')), 4000);
+    });
+    const tracks = info.tracks.map((t) => `${t.video ? 'video' : 'audio'} ${t.codec} ${t.video ? t.video.width + 'x' + t.video.height : ''} samples=${t.nb_samples} dur=${(t.duration / t.timescale).toFixed(1)}s`);
+    return `fragmented=${info.isFragmented} total=${(info.duration / info.timescale).toFixed(1)}s\n${tracks.join('\n')}\nboxes: ${boxes.join(' ')}`;
+  } catch (e) {
+    return 'could not read: ' + e.message;
+  }
+}
+
 // Confirms the file really plays and seeks, since that's the exact thing that used to break.
 function verifyPlayable(blob) {
   return new Promise((resolve) => {

@@ -46,6 +46,7 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 function showScreen(id) {
   const splash = document.getElementById('boot-splash');
   if (splash) splash.remove();
+  if (id !== 'screen-record' && typeof stopLiveCamera === 'function') stopLiveCamera();
   $$('.screen').forEach((s) => s.classList.remove('active'));
   const el = document.getElementById(id);
   el.classList.add('active');
@@ -280,6 +281,8 @@ async function init() {
 
   $$('[data-back]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.id === 'btn-record-close' && typeof liveRecordingActive === 'function' && liveRecordingActive()
+          && !confirm('Stop and discard this recording?')) return;
       stopScanLoop();
       resetRecordVideoElement();
       showScreen(btn.dataset.back);
@@ -287,8 +290,17 @@ async function init() {
   });
 
   $('#btn-manual-submit').addEventListener('click', onManualUnitSubmit);
-  $('#btn-open-camera-retry').addEventListener('click', openNativeCamera);
-  $('#native-camera-input').addEventListener('change', onNativeVideoSelected);
+  $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
+  $('#btn-live-mark').addEventListener('click', onLiveMarkToggle);
+  $('#btn-torch').addEventListener('click', toggleLiveTorch);
+  $('#live-tap-overlay').addEventListener('click', onLiveTapOverlay);
+  $('#btn-retry-live').addEventListener('click', enterRecordScreen);
+  $('#btn-live-fallback').addEventListener('click', () => {
+    if (liveRecordingActive() && !confirm('Stop and discard this recording?')) return;
+    stopLiveCamera();
+    $('#recorder-live').style.display = 'none';
+    $('#recorder-launching').style.display = 'block';
+  });
   $('#btn-select-video').addEventListener('click', openVideoLibrary);
   $('#native-library-input').addEventListener('change', onNativeVideoSelected);
   $('#btn-flag-defect').addEventListener('click', onFlagDefectToggle);
@@ -834,8 +846,10 @@ function onUnitScanned(rawCode) {
 async function enterRecordScreen() {
   showScreen('screen-record');
   $('#record-title').textContent = `${state.currentType} · ${state.currentUnit}`;
-  $('#recorder-launching').style.display = 'block';
+  $('#recorder-launching').style.display = 'none';
+  $('#recorder-live').style.display = 'none';
   $('#recorder-review').style.display = 'none';
+  $('#live-defect-count').textContent = '';
   $('#defect-count-wrap').style.visibility = 'hidden';
   $('#defect-count').textContent = '0';
   $('#min-warning').style.display = 'none';
@@ -848,19 +862,12 @@ async function enterRecordScreen() {
   captureLocation();
   revokePreviewUrl();
   resetRecordVideoElement();
+  const liveOk = await startLiveCamera();
+  if (!$('#screen-record').classList.contains('active')) return;
+  $(liveOk ? '#recorder-live' : '#recorder-launching').style.display = 'block';
 }
 
-function openNativeCamera() {
-  // Requires a direct user tap to reliably open on iOS — that's why this is its own explicit
-  // button rather than auto-firing, since a QR-code scan detection isn't a real user gesture
-  // and Safari can silently block the camera picker if it's triggered that way.
-  $('#native-camera-input').value = ''; // cleared so picking the same result again still fires 'change'
-  $('#native-camera-input').click();
-}
-
-// Picking an already-recorded video from the Photo Library hands back the real full-quality
-// file. The in-browser "capture" camera above doesn't: Safari never sets a video quality on
-// it, so iOS falls back to its default (medium) quality.
+// Fallback path: pick a video already recorded in the phone's Camera app (full quality).
 function openVideoLibrary() {
   $('#native-library-input').value = '';
   $('#native-library-input').click();
@@ -869,7 +876,10 @@ function openVideoLibrary() {
 async function onNativeVideoSelected(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
+  await loadRecordedFile(file);
+}
 
+async function loadRecordedFile(file) {
   const video = $('#record-video');
   revokePreviewUrl();
   state.previewVideoUrl = URL.createObjectURL(file);
@@ -882,6 +892,18 @@ async function onNativeVideoSelected(e) {
     else video.addEventListener('loadedmetadata', resolve, { once: true });
   });
 
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const infoEl = $('#video-info');
+  if (infoEl) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    const low = vw && vh && Math.min(vw, vh) < 720;
+    infoEl.className = 'video-info' + (low ? ' video-info-low' : '');
+    infoEl.textContent = vw && vh
+      ? `Video quality: ${Math.max(vw, vh)}×${Math.min(vw, vh)} · ${mb} MB${low ? ' — low resolution. For a clearer video, record in the Camera app and use Select My Video.' : ''}`
+      : '';
+  }
+
   state.recordedVideoBlob = file;
   state.recordedVideoDurationSec = Number.isFinite(video.duration) ? video.duration : 0;
   state.finalDurationSec = state.recordedVideoDurationSec;
@@ -892,7 +914,13 @@ async function onNativeVideoSelected(e) {
   $('#btn-save-upload').disabled = tooShort;
 
   $('#recorder-launching').style.display = 'none';
+  $('#recorder-live').style.display = 'none';
   $('#recorder-review').style.display = 'block';
+  if (state.defects.length) {
+    $('#defect-count-wrap').style.visibility = 'visible';
+    $('#defect-count').textContent = state.defects.length;
+  }
+  renderReviewMarks();
 }
 
 function onFlagDefectToggle() {
@@ -1043,8 +1071,8 @@ function playShutterSound() {
 }
 
 
-function capturePhotoWithMarker(xPct, yPct) {
-  const video = $('#record-video');
+function capturePhotoWithMarker(xPct, yPct, sourceVideo, atSeconds) {
+  const video = sourceVideo || $('#record-video');
   if (!video.videoWidth || !video.videoHeight) return;
   const canvas = $('#record-canvas');
   const w = video.videoWidth;
@@ -1072,7 +1100,7 @@ function capturePhotoWithMarker(xPct, yPct) {
   const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
   // video.currentTime — the exact paused moment being reviewed — not a live-recording timer,
   // since flagging now happens by scrubbing to a moment afterward, not tapping mid-recording.
-  state.defects.push({ id: 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), t: video.currentTime, x: xPct, y: yPct, photo: dataUrl });
+  state.defects.push({ id: 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), t: atSeconds != null ? atSeconds : video.currentTime, x: xPct, y: yPct, photo: dataUrl });
 
   $('#defect-count-wrap').style.visibility = 'visible';
   $('#defect-count').textContent = state.defects.length;

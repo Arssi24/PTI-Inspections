@@ -354,6 +354,45 @@ body::before {
 .cvp-seek { flex: 1; width: 100%; accent-color: var(--primary); cursor: pointer; min-width: 0; }
 .cvp-ticks { position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; }
 .cvp-ticks span { position: absolute; top: 50%; width: 4px; height: 18px; margin-left: -2px; margin-top: -9px; background: var(--red); border-radius: 2px; box-shadow: 0 0 0 1.5px #fff; }
+/* live recorder */
+.live-video-wrap { position: relative; background: #000; border-radius: 14px; overflow: hidden; margin-top: 4px; }
+#live-video { display: block; width: 100%; max-height: 58vh; min-height: 220px; object-fit: contain; background: #000; }
+.rec-badge {
+  position: absolute; top: 10px; left: 10px; z-index: 2; align-items: center; gap: 7px;
+  background: rgba(0,0,0,0.6); color: #fff; border-radius: 999px; padding: 5px 12px; font-weight: 700; font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; animation: recBlink 1s infinite; }
+@keyframes recBlink { 50% { opacity: 0.25; } }
+.live-controls { display: flex; align-items: center; justify-content: center; gap: 28px; margin: 16px 0 6px; }
+.rec-btn {
+  width: 76px; height: 76px; border-radius: 50%; border: 4px solid var(--navy); background: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex-shrink: 0;
+}
+.rec-btn-inner { width: 54px; height: 54px; border-radius: 50%; background: #e0332f; transition: all 0.15s; }
+.rec-btn.recording .rec-btn-inner { width: 28px; height: 28px; border-radius: 6px; }
+.rec-btn:disabled { opacity: 0.5; }
+.live-side-btn {
+  width: 64px; height: 64px; border-radius: 16px; border: 1px solid var(--border); background: var(--card); color: var(--navy);
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 11.5px; font-weight: 700; cursor: pointer; padding: 0;
+}
+.live-side-btn .icon { width: 22px; height: 22px; }
+.live-side-btn:disabled { opacity: 0.4; cursor: default; }
+.live-side-btn.active { background: var(--red); color: #fff; border-color: var(--red); }
+#btn-torch.active { background: #f0b429; color: #1a1d33; border-color: #f0b429; }
+.live-record-label { text-align: center; font-size: 12.5px; color: var(--text-mute); margin-bottom: 6px; }
+.live-torch-hint { text-align: center; font-size: 12px; color: var(--text-mute); margin: 4px 0; }
+.live-defect-count:empty { display: none; }
+.live-processing { text-align: center; padding: 26px 0 10px; font-weight: 700; color: var(--navy); }
+.live-spinner {
+  width: 34px; height: 34px; margin: 0 auto 12px; border: 4px solid #dfe3ee; border-top-color: var(--navy);
+  border-radius: 50%; animation: spin 0.9s linear infinite;
+}
+
+.video-info { font-size: 12px; color: var(--text-mute); text-align: center; margin: 6px 0 2px; }
+.video-info:empty { display: none; }
+.video-info-low { color: #b45309; font-weight: 700; }
 .mark-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
 .mark-chips:empty { display: none; }
 .mark-chips-label { font-size: 12.5px; font-weight: 700; color: var(--red); margin-right: 2px; }

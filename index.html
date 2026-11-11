@@ -281,15 +281,43 @@
         <div style="width:36px"></div>
       </header>
 
-      <div id="recorder-launching" class="card" style="text-align:center;">
-        <p style="margin:8px 0 12px;font-weight:700;">For the clearest video:</p>
+      <div id="recorder-live" style="display:none;">
+        <div class="live-video-wrap">
+          <video id="live-video" playsinline muted autoplay></video>
+          <div class="review-tap-overlay" id="live-tap-overlay" style="display:none;"></div>
+          <div class="rec-badge" id="rec-badge" style="display:none;"><span class="rec-dot"></span><span id="rec-timer">0:00</span></div>
+        </div>
+        <div class="review-arm-hint" id="live-arm-hint" style="display:none;">Tap on the video, right where you see the problem. Recording keeps going.</div>
+        <div class="live-controls" id="live-controls">
+          <button class="live-side-btn" id="btn-torch" type="button" style="display:none;" title="Flashlight">
+            <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>
+            <span>Light</span>
+          </button>
+          <button class="rec-btn" id="btn-live-record" type="button" title="Record"><span class="rec-btn-inner"></span></button>
+          <button class="live-side-btn" id="btn-live-mark" type="button" disabled title="Mark a problem">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            <span>Mark</span>
+          </button>
+        </div>
+        <div class="live-record-label" id="live-record-label">Tap to start recording</div>
+        <div class="live-torch-hint" id="live-torch-hint" style="display:none;">Need light? Turn on your phone's flashlight from Control Center before recording.</div>
+        <div class="defect-count live-defect-count" id="live-defect-count"></div>
+        <div class="live-processing" id="live-processing" style="display:none;">
+          <div class="live-spinner"></div>
+          <div>Saving your video…</div>
+        </div>
+        <button class="btn btn-secondary btn-block" id="btn-live-fallback" style="margin-top:14px;">Use my Camera app instead</button>
+      </div>
+
+      <div id="recorder-launching" class="card" style="display:none;text-align:center;">
+        <p style="margin:8px 0 12px;font-weight:700;">Record with your phone's Camera app</p>
         <ol style="text-align:left;margin:0 0 14px;padding-left:20px;line-height:1.6;font-size:14.5px;">
           <li>Open your iPhone <strong>Camera</strong> app and switch to <strong>Video</strong></li>
-          <li>Need light? Tap the lightning bolt at the top of the Camera screen to turn the flashlight on, then record your full walkaround</li>
+          <li>Need light? Tap the lightning bolt at the top of the Camera screen, then record your full walkaround</li>
           <li>Come back here and tap <strong>Select My Video</strong>, then pick the one you just recorded</li>
         </ol>
         <button class="btn btn-primary btn-block" id="btn-select-video">Select My Video</button>
-        <button class="btn btn-secondary btn-block" id="btn-open-camera-retry" style="margin-top:10px;">Quick record here (lower quality)</button>
+        <button class="btn btn-secondary btn-block" id="btn-retry-live" style="margin-top:10px;">Try the in-app camera again</button>
       </div>
 
       <div id="recorder-review" style="display:none;">
@@ -299,6 +327,8 @@
         </div>
         <canvas id="record-canvas" style="display:none;"></canvas>
         <div class="review-arm-hint" id="review-arm-hint" style="display:none;">Video paused. Tap on the video, right where you see the issue.</div>
+
+        <div class="video-info" id="video-info"></div>
 
         <div class="record-location" id="record-location">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -320,7 +350,6 @@
         <button class="btn btn-primary btn-block" id="btn-save-upload">Upload Video</button>
       </div>
 
-      <input type="file" id="native-camera-input" accept="video/*" capture="environment" style="display:none;" />
       <input type="file" id="native-library-input" accept="video/*" style="display:none;" />
     </div>
   </section>
@@ -461,6 +490,10 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/offlineQueue.js"></script>
+<script src="js/mp4box.all.min.js"></script>
+<script src="js/mp4-muxer.js"></script>
+<script src="js/mp4Repair.js"></script>
+<script src="js/liveRecorder.js"></script>
 <script src="js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {

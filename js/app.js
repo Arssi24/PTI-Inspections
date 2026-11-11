@@ -900,7 +900,7 @@ async function loadRecordedFile(file) {
     const low = vw && vh && Math.min(vw, vh) < 720;
     infoEl.className = 'video-info' + (low ? ' video-info-low' : '');
     infoEl.textContent = vw && vh
-      ? `Video quality: ${Math.max(vw, vh)}×${Math.min(vw, vh)} · ${mb} MB${low ? ' — low resolution. For a clearer video, record in the Camera app and use Select My Video.' : ''}`
+      ? `Video quality: ${Math.max(vw, vh)}×${Math.min(vw, vh)} · ${mb} MB${Number.isFinite(video.duration) && video.duration > 0 ? ' · ' + ((file.size * 8) / video.duration / 1e6).toFixed(1) + ' Mbps' : ''}${low ? ' — low resolution. For a clearer video, record in the Camera app and use Select My Video.' : ''}`
       : '';
   }
 

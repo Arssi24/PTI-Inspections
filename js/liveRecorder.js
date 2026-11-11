@@ -46,6 +46,12 @@ async function startLiveCamera() {
   try { await v.play(); } catch (e) { /* autoplay handled by attribute */ }
   setupLiveTorch();
   setLiveControls('ready');
+  try {
+    const s = LIVE.stream.getVideoTracks()[0].getSettings();
+    const info = $('#live-cam-info');
+    info.className = 'video-info' + (Math.min(s.width || 0, s.height || 0) < 1000 ? ' video-info-low' : '');
+    info.textContent = `Camera: ${Math.max(s.width || 0, s.height || 0)}×${Math.min(s.width || 0, s.height || 0)}${s.frameRate ? ' @ ' + Math.round(s.frameRate) + ' fps' : ''}`;
+  } catch (e) { /* settings unavailable */ }
   return true;
 }
 

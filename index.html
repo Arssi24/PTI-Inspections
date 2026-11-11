@@ -282,8 +282,14 @@
       </header>
 
       <div id="recorder-launching" class="card" style="text-align:center;">
-        <p style="margin:8px 0;">Record your walkaround using your phone's camera, then come back here to review it and flag anything you saw.</p>
-        <button class="btn btn-primary btn-block" id="btn-open-camera-retry">Open Camera</button>
+        <p style="margin:8px 0 12px;font-weight:700;">For the clearest video:</p>
+        <ol style="text-align:left;margin:0 0 14px;padding-left:20px;line-height:1.6;font-size:14.5px;">
+          <li>Open your iPhone <strong>Camera</strong> app and switch to <strong>Video</strong></li>
+          <li>Record your full walkaround</li>
+          <li>Come back here and tap <strong>Select My Video</strong>, then pick the one you just recorded</li>
+        </ol>
+        <button class="btn btn-primary btn-block" id="btn-select-video">Select My Video</button>
+        <button class="btn btn-secondary btn-block" id="btn-open-camera-retry" style="margin-top:10px;">Quick record here (lower quality)</button>
       </div>
 
       <div id="recorder-review" style="display:none;">
@@ -292,7 +298,7 @@
           <div class="review-tap-overlay" id="review-tap-overlay" style="display:none;"></div>
         </div>
         <canvas id="record-canvas" style="display:none;"></canvas>
-        <div class="review-arm-hint" id="review-arm-hint" style="display:none;">Tap on the video, right where you see the issue</div>
+        <div class="review-arm-hint" id="review-arm-hint" style="display:none;">Video paused. Tap on the video, right where you see the issue.</div>
 
         <div class="record-location" id="record-location">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -302,10 +308,11 @@
         <div class="defect-count" id="defect-count-wrap" style="visibility:hidden;">
           <span id="defect-count">0</span> defect photo(s) flagged
         </div>
+        <div class="mark-chips" id="mark-chips"></div>
 
         <button class="btn btn-secondary btn-block" id="btn-flag-defect">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-          Flag Defect at Current Moment
+          Mark a Problem Spot
         </button>
 
         <div class="min-warning" id="min-warning" style="display:none;">This video is shorter than the required minimum. Please retake.</div>
@@ -314,6 +321,7 @@
       </div>
 
       <input type="file" id="native-camera-input" accept="video/*" capture="environment" style="display:none;" />
+      <input type="file" id="native-library-input" accept="video/*" style="display:none;" />
     </div>
   </section>
 
@@ -431,7 +439,7 @@
       <!-- Drivers panel -->
       <div class="dash-panel" id="panel-drivers">
         <div class="dash-stats" id="drivers-stats"></div>
-        <p class="demo-note">Everyone who's signed up with your fleet code, whether or not they've submitted an inspection yet.</p>
+        <p class="demo-note">Everyone who's signed up with your fleet code. Green = PTI done today, yellow = not yet, red = still missing after 12:00 PM. Missing drivers are listed first.</p>
         <div id="drivers-list" class="entry-list"></div>
       </div>
     </div>

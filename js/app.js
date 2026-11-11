@@ -77,7 +77,7 @@ function initCustomVideoPlayer(video) {
       <svg class="icon cvp-icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
     </button>
     <button class="cvp-btn cvp-skip cvp-back" type="button" title="Back 15 seconds">−15s</button>
-    <input type="range" class="cvp-seek" min="0" max="1000" value="0" step="1" />
+    <div class="cvp-seekwrap"><input type="range" class="cvp-seek" min="0" max="1000" value="0" step="1" /><div class="cvp-ticks"></div></div>
     <button class="cvp-btn cvp-skip cvp-fwd" type="button" title="Forward 15 seconds">+15s</button>
     <span class="cvp-time">0:00 / 0:00</span>
   `;
@@ -128,6 +128,22 @@ function initCustomVideoPlayer(video) {
     const dur = safeDuration();
     video.currentTime = dur > 0 ? Math.min(dur, (video.currentTime || 0) + 15) : (video.currentTime || 0) + 15;
   });
+
+  const ticks = bar.querySelector('.cvp-ticks');
+  let markTimes = [];
+  function drawTicks() {
+    ticks.innerHTML = '';
+    const dur = safeDuration();
+    if (!dur) return;
+    markTimes.forEach((t) => {
+      const tick = document.createElement('span');
+      tick.style.left = Math.min(100, Math.max(0, (t / dur) * 100)) + '%';
+      ticks.appendChild(tick);
+    });
+  }
+  video.cvpSetMarks = (times) => { markTimes = times || []; drawTicks(); };
+  video.addEventListener('durationchange', drawTicks);
+  video.addEventListener('loadedmetadata', drawTicks);
 
   updatePlayIcon();
   updateTime();
@@ -273,6 +289,8 @@ async function init() {
   $('#btn-manual-submit').addEventListener('click', onManualUnitSubmit);
   $('#btn-open-camera-retry').addEventListener('click', openNativeCamera);
   $('#native-camera-input').addEventListener('change', onNativeVideoSelected);
+  $('#btn-select-video').addEventListener('click', openVideoLibrary);
+  $('#native-library-input').addEventListener('change', onNativeVideoSelected);
   $('#btn-flag-defect').addEventListener('click', onFlagDefectToggle);
   $('#review-tap-overlay').addEventListener('click', onReviewTapOverlay);
   $('#btn-retake').addEventListener('click', onRetake);
@@ -823,6 +841,7 @@ async function enterRecordScreen() {
   $('#min-warning').style.display = 'none';
   disarmDefectTap();
   state.defects = [];
+  renderReviewMarks();
   state.recordedVideoBlob = null;
   state.recordedVideoDurationSec = 0;
   state.currentLocation = null;
@@ -837,6 +856,14 @@ function openNativeCamera() {
   // and Safari can silently block the camera picker if it's triggered that way.
   $('#native-camera-input').value = ''; // cleared so picking the same result again still fires 'change'
   $('#native-camera-input').click();
+}
+
+// Picking an already-recorded video from the Photo Library hands back the real full-quality
+// file. The in-browser "capture" camera above doesn't: Safari never sets a video quality on
+// it, so iOS falls back to its default (medium) quality.
+function openVideoLibrary() {
+  $('#native-library-input').value = '';
+  $('#native-library-input').click();
 }
 
 async function onNativeVideoSelected(e) {
@@ -871,6 +898,7 @@ async function onNativeVideoSelected(e) {
 function onFlagDefectToggle() {
   if (state.defectTapArmed) { disarmDefectTap(); return; }
   const video = $('#record-video');
+  state.resumeAfterMark = !video.paused && !video.ended;
   video.pause();
   state.defectTapArmed = true;
   $('#btn-flag-defect').classList.add('active');
@@ -911,6 +939,34 @@ function onReviewTapOverlay(e) {
 
   capturePhotoWithMarker(xPct, yPct);
   disarmDefectTap();
+  if (state.resumeAfterMark) {
+    state.resumeAfterMark = false;
+    video.play().catch(() => {});
+  }
+}
+
+function renderReviewMarks() {
+  const box = $('#mark-chips');
+  if (!box) return;
+  box.innerHTML = '';
+  state.defects.forEach((d, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'mark-chip';
+    chip.innerHTML = `<button type="button" class="mark-chip-go">&#9873; ${fmtTime(d.t)}</button><button type="button" class="mark-chip-x" title="Remove this mark">&times;</button>`;
+    chip.querySelector('.mark-chip-go').addEventListener('click', () => {
+      const v = $('#record-video');
+      v.currentTime = Math.max(0, d.t - 2);
+      v.play().catch(() => {});
+    });
+    chip.querySelector('.mark-chip-x').addEventListener('click', () => {
+      state.defects.splice(i, 1);
+      $('#defect-count').textContent = state.defects.length;
+      renderReviewMarks();
+    });
+    box.appendChild(chip);
+  });
+  const v = $('#record-video');
+  if (v && v.cvpSetMarks) v.cvpSetMarks(state.defects.map((d) => d.t));
 }
 
 function captureLocation() {
@@ -1020,6 +1076,7 @@ function capturePhotoWithMarker(xPct, yPct) {
 
   $('#defect-count-wrap').style.visibility = 'visible';
   $('#defect-count').textContent = state.defects.length;
+  renderReviewMarks();
 }
 
 function newId() {
@@ -1462,8 +1519,29 @@ async function renderDriversList() {
     list.innerHTML = '<div class="empty-state">Could not load drivers — try again in a moment.</div>';
     return;
   }
+  let recent = null;
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+    recent = await sbGetRecentInspections(state.fleetCode, since);
+  } catch (err) {
+    recent = null;
+  }
+  let counts = { green: 0, yellow: 0, red: 0 };
+  drivers.forEach((d) => {
+    d._pti = recent ? computePtiStatus(d, recent) : null;
+    if (d._pti) counts[d._pti.level] += 1;
+  });
+  if (recent) {
+    const rank = { red: 0, yellow: 1, green: 2 };
+    drivers.sort((a, b) => rank[a._pti.level] - rank[b._pti.level] || (a.name || '').localeCompare(b.name || ''));
+  }
   statsEl.innerHTML = `
     <div class="stat-card"><div class="stat-num">${drivers.length}</div><div class="stat-label">Active drivers</div></div>
+    ${recent ? `
+    <div class="stat-card"><div class="stat-num"><span class="pti-dot pti-green"></span>${counts.green}</div><div class="stat-label">PTI done today</div></div>
+    <div class="stat-card"><div class="stat-num"><span class="pti-dot pti-yellow"></span>${counts.yellow}</div><div class="stat-label">Not yet</div></div>
+    <div class="stat-card"><div class="stat-num"><span class="pti-dot pti-red"></span>${counts.red}</div><div class="stat-label">Missing PTI</div></div>
+    ` : ''}
   `;
   if (drivers.length === 0) {
     list.innerHTML = '<div class="empty-state">No drivers have joined with your fleet code yet.</div>';
@@ -1477,6 +1555,30 @@ async function renderDriversList() {
   });
 }
 
+// A driver who hasn't uploaded a PTI by this hour (manager's local time) turns from yellow to red.
+const PTI_DEADLINE_HOUR = 12;
+
+function computePtiStatus(driver, inspections) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const mine = inspections.filter((r) => r.driver_id === driver.id);
+  const todayPti = mine.find((r) => r.type === 'PTI' && new Date(r.created_at) >= startOfToday);
+  const fmt = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (todayPti) {
+    return { level: 'green', text: `PTI done at ${fmt(new Date(todayPti.created_at))}`, unit: todayPti.unit };
+  }
+  const last = mine[0];
+  const lastPti = mine.find((r) => r.type === 'PTI');
+  const lastText = lastPti
+    ? `last PTI ${new Date(lastPti.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+    : 'no PTI in the last 7 days';
+  const unit = last ? last.unit : (driver.assigned_unit || '');
+  const pastDeadline = new Date().getHours() >= PTI_DEADLINE_HOUR;
+  return pastDeadline
+    ? { level: 'red', text: `No PTI today — ${lastText}`, unit }
+    : { level: 'yellow', text: `No PTI yet today — ${lastText}`, unit };
+}
+
 function closeAllDriverMenus() {
   $$('.driver-menu.show').forEach((m) => m.classList.remove('show'));
 }
@@ -1486,7 +1588,8 @@ function renderDriverRowView(row, d) {
   row.innerHTML = `
     <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
     <div class="driver-row-info">
-      <div class="entry-unit">${escapeHtml(d.name)}</div>
+      <div class="entry-unit">${d._pti ? `<span class="pti-dot pti-${d._pti.level}"></span>` : ''}${escapeHtml(d.name)}${d._pti && d._pti.unit ? `<span class="pti-unit">${escapeHtml(d._pti.unit)}</span>` : ''}</div>
+      ${d._pti ? `<div class="pti-status pti-status-${d._pti.level}">${escapeHtml(d._pti.text)}</div>` : ''}
       <div class="entry-meta"><span>${escapeHtml(d.email)}</span>${d.phone ? `<span>${escapeHtml(d.phone)}</span>` : ''}</div>
       ${d.assigned_unit ? `<div class="driver-assigned">Assigned: ${escapeHtml(d.assigned_unit)}</div>` : ''}
     </div>
@@ -1572,12 +1675,49 @@ function inRange(ts, range) {
   return true;
 }
 
+// Inspections (video + defect photos) older than this are deleted automatically the first
+// time a manager opens the dashboard each day. Same delete path as the manual Delete button.
+const RETENTION_DAYS = 60;
+const PURGE_BATCH_LIMIT = 40;
+
+async function purgeExpiredInspections(all) {
+  try {
+    const today = new Date().toDateString();
+    if (localStorage.getItem('pti_last_purge') === today) return all;
+    const cutoff = Date.now() - RETENTION_DAYS * 24 * 3600 * 1000;
+    const expired = all.filter((r) => new Date(r.created_at).getTime() < cutoff).slice(0, PURGE_BATCH_LIMIT);
+    if (expired.length === 0) {
+      localStorage.setItem('pti_last_purge', today);
+      return all;
+    }
+    const removedIds = new Set();
+    for (const r of expired) {
+      const paths = [r.video_path, ...(r.defects || []).map((d) => d.photo_path)].filter(Boolean);
+      try {
+        await sbDeleteStorageObjects(paths);
+        await sbDeleteInspection(r.id);
+        removedIds.add(r.id);
+      } catch (err) {
+        console.warn('Auto-delete skipped one inspection', r.id, err);
+      }
+    }
+    if (removedIds.size === expired.length && expired.length < PURGE_BATCH_LIMIT) {
+      localStorage.setItem('pti_last_purge', today);
+    }
+    return all.filter((r) => !removedIds.has(r.id));
+  } catch (err) {
+    console.warn('Auto-delete check failed', err);
+    return all;
+  }
+}
+
 async function renderDashboard() {
   revokeActiveVideoObjectUrls();
   const list = $('#dash-list');
   list.innerHTML = '<div class="empty-state">Loading…</div>';
 
-  const all = await sbGetInspections(state.fleetCode);
+  let all = await sbGetInspections(state.fleetCode);
+  if (state.role === 'manager') all = await purgeExpiredInspections(all);
   const registeredUnits = (await sbGetUnits(state.fleetCode)).map((u) => u.unit);
 
   const existingDrivers = Array.from(new Set(all.map((r) => r.driver_name))).sort();
@@ -1671,7 +1811,7 @@ async function renderEntryCard(r, showDriver) {
   const videoHtml = videoUrl
     ? `<div class="entry-video-wrap">
          <div class="entry-video-loading">Loading video…</div>
-         <video playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}"></video>
+         <video playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}" data-marks="${escapeHtml(JSON.stringify((r.defects || []).map((d) => d.t)))}"></video>
          <div class="entry-video-actions">
            <button class="entry-download-btn" data-video-url="${videoUrl}" data-video-name="${unit}-${r.type}-${r.id}.${videoUrl.includes('.mp4') ? 'mp4' : 'webm'}" type="button">
              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1702,6 +1842,7 @@ async function renderEntryCard(r, showDriver) {
       ${showDriver ? `<div class="entry-detail-row">Driver: ${driverName}${driverEmail ? ` · <a href="mailto:${driverEmail}">${driverEmail}</a>` : ''}${driverPhone ? ` · ${driverPhone}` : ''}</div>` : ''}
       <div class="entry-detail-row">Location: ${locationHtml}</div>
       ${videoHtml}
+      ${hasDefects ? `<div class="mark-chips mark-chips-mgr"><span class="mark-chips-label">Driver flagged:</span>${r.defects.map((d) => `<span class="mark-chip"><button type="button" class="mark-chip-go" data-t="${d.t}">&#9873; ${fmtTime(d.t)}</button></span>`).join('')}</div>` : ''}
       ${photosHtml}
       ${state.role === 'manager' ? `
         <button class="entry-delete-btn" type="button">
@@ -1747,6 +1888,18 @@ async function renderEntryCard(r, showDriver) {
       downloadFile(downloadBtn.dataset.videoUrl, downloadBtn.dataset.videoName, downloadBtn);
     });
   }
+  card.querySelectorAll('.mark-chips-mgr .mark-chip-go').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await loadCardVideo(card);
+      const v = card.querySelector('.entry-video-wrap video');
+      if (!v) return;
+      const t = Math.max(0, parseFloat(btn.dataset.t) - 2);
+      const go = () => { v.currentTime = t; v.play().catch(() => {}); };
+      if (v.readyState >= 1) go(); else v.addEventListener('loadedmetadata', go, { once: true });
+    });
+  });
+  card.querySelector('.mark-chips-mgr')?.addEventListener('click', (e) => e.stopPropagation());
   card.querySelector('.entry-video-wrap')?.addEventListener('click', (e) => e.stopPropagation());
   card.querySelector('.entry-video-actions')?.addEventListener('click', (e) => e.stopPropagation());
   return card;
@@ -1779,14 +1932,30 @@ async function loadCardVideo(card) {
   const remoteUrl = video.dataset.remoteUrl;
   if (!remoteUrl) return;
   video.dataset.loaded = '1'; // set immediately so re-toggling the card doesn't re-fetch
+  const applyMarks = () => {
+    try { if (video.cvpSetMarks) video.cvpSetMarks(JSON.parse(video.dataset.marks || '[]')); } catch (e) { /* no marks */ }
+  };
   try {
-    const res = await fetch(remoteUrl);
-    if (!res.ok) throw new Error(`Could not fetch video (${res.status})`);
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    state.activeVideoObjectUrls.push(objectUrl);
-    video.src = objectUrl;
+    // Full-quality videos are large, so stream them straight from storage (the server
+    // supports range requests) and only fall back to downloading the whole file first if
+    // the browser can't play the stream.
+    await new Promise((resolve, reject) => {
+      video.preload = 'metadata';
+      video.addEventListener('loadedmetadata', resolve, { once: true });
+      video.addEventListener('error', () => reject(new Error('stream failed')), { once: true });
+      video.src = remoteUrl;
+      setTimeout(() => reject(new Error('stream timeout')), 15000);
+    }).catch(async () => {
+      const res = await fetch(remoteUrl);
+      if (!res.ok) throw new Error(`Could not fetch video (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      state.activeVideoObjectUrls.push(objectUrl);
+      video.removeAttribute('src');
+      video.src = objectUrl;
+    });
     initCustomVideoPlayer(video);
+    applyMarks();
     video.style.display = 'block';
     if (loadingEl) loadingEl.style.display = 'none';
     fixBrokenDuration(video);

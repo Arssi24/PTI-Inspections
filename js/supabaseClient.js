@@ -130,6 +130,17 @@ async function sbGetInspections(fleetCode) {
   return data;
 }
 
+async function sbGetRecentInspections(fleetCode, sinceIso) {
+  const { data, error } = await requireSb()
+    .from('inspections')
+    .select('driver_id,driver_name,type,unit,created_at')
+    .eq('fleet_code', fleetCode)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 async function sbInsertInspection(record) {
   return requireSb().from('inspections').insert(record);
 }

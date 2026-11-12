@@ -303,6 +303,7 @@ async function init() {
   $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
+  $('#btn-live-fit').addEventListener('click', toggleLiveFit);
   $('#live-tap-overlay').addEventListener('click', onLiveTapOverlay);
   $('#btn-retry-live').addEventListener('click', enterRecordScreen);
   $('#btn-live-fallback').addEventListener('click', () => {

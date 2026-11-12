@@ -357,7 +357,7 @@ body::before {
 /* live recorder: full-screen camera with controls on top of it */
 .live-full { position: fixed; inset: 0; z-index: 60; background: #000; color: #fff; }
 .live-video-wrap { position: absolute; inset: 0; background: #000; overflow: hidden; }
-#live-video { display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
+#live-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; transform-origin: center center; }
 .live-full .review-tap-overlay { border-radius: 0; }
 .live-close {
   position: absolute; z-index: 3; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px;

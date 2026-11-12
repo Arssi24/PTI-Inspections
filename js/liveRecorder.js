@@ -22,6 +22,43 @@ function pickLiveMime() {
   return candidates.find((m) => MediaRecorder.isTypeSupported(m)) || '';
 }
 
+const FIT_MODES = ['fit', 'wide', 'fill'];
+const FIT_LABELS = { fit: 'Fit', wide: 'Wide', fill: 'Fill' };
+
+function liveScales(video) {
+  const cw = video.clientWidth || 1;
+  const ch = video.clientHeight || 1;
+  const vw = video.videoWidth || cw;
+  const vh = video.videoHeight || ch;
+  const contain = Math.min(cw / vw, ch / vh);
+  const cover = Math.max(cw / vw, ch / vh);
+  return { contain, cover, wide: Math.sqrt(contain * cover) };
+}
+
+// Fit = whole picture, Fill = crops to cover the screen, Wide = in between.
+function applyLiveFit(mode) {
+  if (!FIT_MODES.includes(mode)) mode = 'wide';
+  LIVE.fitMode = mode;
+  const v = document.getElementById('live-video');
+  if (v) {
+    const sc = liveScales(v);
+    const k = sc[mode === 'fit' ? 'contain' : mode === 'fill' ? 'cover' : 'wide'] / sc.contain;
+    v.style.transform = k > 1.001 ? `scale(${k.toFixed(4)})` : '';
+  }
+  const label = document.getElementById('live-fit-label');
+  if (label) label.textContent = FIT_LABELS[mode];
+}
+
+function reapplyLiveFit() {
+  if (LIVE.stream) applyLiveFit(LIVE.fitMode);
+}
+
+function toggleLiveFit() {
+  const next = FIT_MODES[(FIT_MODES.indexOf(LIVE.fitMode || 'wide') + 1) % FIT_MODES.length];
+  applyLiveFit(next);
+  try { localStorage.setItem('pti_live_fit_mode', next); } catch (e) { /* storage unavailable */ }
+}
+
 function liveRecordingActive() {
   return LIVE.recording;
 }
@@ -57,9 +94,14 @@ async function startLiveCamera() {
   }
   const v = $('#live-video');
   v.muted = true;
+  try { applyLiveFit(localStorage.getItem('pti_live_fit_mode') || 'wide'); } catch (e) { applyLiveFit('wide'); }
   v.srcObject = LIVE.stream;
   try { await v.play(); } catch (e) { /* autoplay handled by attribute */ }
+  v.addEventListener('loadedmetadata', () => applyLiveFit(LIVE.fitMode), { once: true });
+  window.removeEventListener('resize', reapplyLiveFit);
+  window.addEventListener('resize', reapplyLiveFit);
   setupLiveTorch();
+  setupLiveZoom();
   setLiveControls('ready');
   LIVE.events = [];
   LIVE.frames = 0;
@@ -127,6 +169,16 @@ function setupLiveTorch() {
   btn.style.display = supported ? 'inline-flex' : 'none';
   btn.classList.remove('active');
   hint.style.display = supported ? 'none' : 'block';
+}
+
+// Start at the camera's normal 1x view, like the regular Camera app, where the phone allows it.
+function setupLiveZoom() {
+  const track = LIVE.stream && LIVE.stream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+  if (caps && caps.zoom) {
+    const z = Math.min(caps.zoom.max || 1, Math.max(caps.zoom.min || 1, 1));
+    track.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
+  }
 }
 
 async function toggleLiveTorch() {
@@ -398,17 +450,21 @@ function hideLiveHint() {
   if (h) h.style.display = 'none';
 }
 
-// The preview fills the screen (object-fit: cover), so part of the picture can sit off-screen.
-// Map a tap onto the full camera picture, including the cropped parts.
+// Map a tap on the screen onto the full camera picture, including any part that is cropped off
+// screen in Wide / Fill mode.
 function liveContentRect(video) {
   const r = video.getBoundingClientRect();
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) return r;
-  const scale = Math.max(r.width / vw, r.height / vh);
+  const sc = liveScales(video);
+  const mode = LIVE.fitMode || 'wide';
+  const scale = sc[mode === 'fit' ? 'contain' : mode === 'fill' ? 'cover' : 'wide'];
   const w = vw * scale;
   const h = vh * scale;
-  return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, width: w, height: h };
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  return { left: cx - w / 2, top: cy - h / 2, width: w, height: h };
 }
 
 function onLiveTapOverlay(e) {

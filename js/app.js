@@ -300,6 +300,15 @@ async function init() {
   $('#btn-play-raw').addEventListener('click', () => playDiagVersion('raw'));
   $('#btn-play-rebuilt').addEventListener('click', () => playDiagVersion('rebuilt'));
   $('#btn-play-patched').addEventListener('click', () => playDiagVersion('patched'));
+  const showRecMode = () => {
+    const stable = wantCanvasMode();
+    $('#rec-mode-note').textContent = `Next recording uses: ${stable ? 'Stable (records a fixed-size picture)' : 'Direct (records the raw camera)'}`;
+    $('#btn-mode-canvas').classList.toggle('active', stable);
+    $('#btn-mode-direct').classList.toggle('active', !stable);
+  };
+  $('#btn-mode-canvas').addEventListener('click', () => { try { localStorage.setItem('pti_rec_mode', 'canvas'); } catch (e) { /* ignore */ } showRecMode(); });
+  $('#btn-mode-direct').addEventListener('click', () => { try { localStorage.setItem('pti_rec_mode', 'direct'); } catch (e) { /* ignore */ } showRecMode(); });
+  showRecMode();
   $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
@@ -1087,10 +1096,10 @@ function playShutterSound() {
 
 function capturePhotoWithMarker(xPct, yPct, sourceVideo, atSeconds) {
   const video = sourceVideo || $('#record-video');
-  if (!video.videoWidth || !video.videoHeight) return;
+  const w = video.videoWidth || video.width;
+  const h = video.videoHeight || video.height;
+  if (!w || !h) return;
   const canvas = $('#record-canvas');
-  const w = video.videoWidth;
-  const h = video.videoHeight;
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');

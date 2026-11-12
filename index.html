@@ -284,6 +284,7 @@
       <div id="recorder-live" class="live-full" style="display:none;">
         <div class="live-video-wrap">
           <video id="live-video" playsinline muted autoplay></video>
+          <canvas id="live-canvas" style="display:none;"></canvas>
           <div class="review-tap-overlay" id="live-tap-overlay" style="display:none;"></div>
           <div class="rec-badge" id="rec-badge" style="display:none;"><span class="rec-dot"></span><span id="rec-timer">0:00</span></div>
         </div>
@@ -342,6 +343,11 @@
             <button type="button" class="btn btn-secondary" id="btn-play-patched">Play patched</button>
             <button type="button" class="btn btn-secondary" id="btn-play-rebuilt">Play rebuilt</button>
           </div>
+          <div class="rec-diag-btns">
+            <button type="button" class="btn btn-secondary" id="btn-mode-canvas">Recording mode: Stable</button>
+            <button type="button" class="btn btn-secondary" id="btn-mode-direct">Recording mode: Direct</button>
+          </div>
+          <div class="video-info" id="rec-mode-note"></div>
           <pre id="rec-diag-text"></pre>
         </details>
 

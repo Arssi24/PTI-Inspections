@@ -10,7 +10,30 @@ function mp4DescriptionFromBox(box) {
   return new Uint8Array(ds.buffer.slice(8, ds.position));
 }
 
-async function repairMp4(blob) {
+const REPAIR_STATS = {};
+
+// Finds key frames by reading the video data itself (H.264 IDR / H.265 IRAP NAL units) instead
+// of trusting the recorder's flags. A file with no marked key frame shows black video.
+function isKeyFrameData(data, lenSize, hevc) {
+  let p = 0;
+  const n = data.length;
+  while (p + lenSize <= n) {
+    let len = 0;
+    for (let i = 0; i < lenSize; i++) len = (len * 256) + data[p + i];
+    p += lenSize;
+    if (len <= 0 || p + len > n) break;
+    if (hevc) {
+      const t = (data[p] >> 1) & 0x3f;
+      if (t >= 16 && t <= 21) return true;
+    } else if ((data[p] & 0x1f) === 5) {
+      return true;
+    }
+    p += len;
+  }
+  return false;
+}
+
+async function repairMp4(blob, opts = {}) {
   if (typeof MP4Box === 'undefined' || typeof Mp4Muxer === 'undefined') throw new Error('repair libs missing');
   const buf = await blob.arrayBuffer();
   buf.fileStart = 0;
@@ -38,7 +61,7 @@ async function repairMp4(blob) {
 
   const vTrack = infoTracks && infoTracks.find((t) => t.video);
   if (!vTrack || tracks[vTrack.id].samples.length === 0) throw new Error('no video samples');
-  const aTrack = infoTracks.find((t) => t.audio);
+  const aTrack = opts.noAudio ? null : infoTracks.find((t) => t.audio);
 
   const trakOf = (id) => file.moov.traks.find((t) => t.tkhd.track_id === id);
   const vEntry = trakOf(vTrack.id).mdia.minf.stbl.stsd.entries[0];
@@ -68,14 +91,25 @@ async function repairMp4(blob) {
   const us = (v, ts) => Math.max(0, Math.round((v * 1e6) / ts));
 
   const vSamples = tracks[vTrack.id].samples;
+  const lenSize = ((vBox.lengthSizeMinusOne != null ? vBox.lengthSizeMinusOne : 3) & 3) + 1;
+  let keyFlagged = 0;
+  let keyDetected = 0;
+  let keyUsed = 0;
   vSamples.forEach((s, i) => {
     const meta = i === 0
       ? { decoderConfig: { codec: vTrack.codec, codedWidth: vTrack.video.width, codedHeight: vTrack.video.height, description: vDescription } }
       : undefined;
     const pts = us(s.cts, s.timescale);
     const dts = us(s.dts, s.timescale);
-    muxer.addVideoChunkRaw(new Uint8Array(s.data), s.is_sync ? 'key' : 'delta', pts, us(s.duration, s.timescale), meta, pts - dts);
+    const bytes = new Uint8Array(s.data);
+    const detected = isKeyFrameData(bytes, lenSize, vCodec === 'hevc');
+    if (s.is_sync) keyFlagged++;
+    if (detected) keyDetected++;
+    const isKey = i === 0 || s.is_sync || detected;
+    if (isKey) keyUsed++;
+    muxer.addVideoChunkRaw(bytes, isKey ? 'key' : 'delta', pts, us(s.duration, s.timescale), meta, pts - dts);
   });
+  REPAIR_STATS.video = `video samples=${vSamples.length} keyFlagged=${keyFlagged} keyDetected=${keyDetected} keyUsed=${keyUsed} lenSize=${lenSize} firstDts=${vSamples[0].dts} firstCts=${vSamples[0].cts} ts=${vSamples[0].timescale}`;
 
   if (aTrack && aDescription) {
     const aSamples = tracks[aTrack.id].samples;
@@ -119,6 +153,47 @@ async function describeMp4(blob) {
   }
 }
 
+// Plays a blob briefly and measures whether a real picture (not black) was drawn. Diagnostic only.
+function measureFrameBrightness(blob) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.muted = true;
+    v.playsInline = true;
+    const url = URL.createObjectURL(blob);
+    let finished = false;
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      URL.revokeObjectURL(url);
+      try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ }
+      resolve(result);
+    };
+    const sample = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 32;
+        c.height = 18;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(v, 0, 0, 32, 18);
+        const d = ctx.getImageData(0, 0, 32, 18).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+        finish(`brightness=${(sum / (d.length / 4)).toFixed(0)}/255 at ${v.currentTime.toFixed(1)}s (0 means black picture)`);
+      } catch (e) {
+        finish('could not read picture: ' + e.message);
+      }
+    };
+    setTimeout(() => finish('picture check timed out'), 6000);
+    v.addEventListener('error', () => finish('picture check: player error'));
+    v.addEventListener('loadeddata', () => {
+      v.play().then(() => {
+        setTimeout(sample, 700);
+      }).catch(() => sample());
+    });
+    v.src = url;
+  });
+}
+
 // Confirms the file really plays and seeks, since that's the exact thing that used to break.
 function verifyPlayable(blob) {
   return new Promise((resolve) => {
@@ -127,6 +202,7 @@ function verifyPlayable(blob) {
     v.preload = 'auto';
     const url = URL.createObjectURL(blob);
     const done = (ok, info) => { URL.revokeObjectURL(url); v.removeAttribute('src'); v.load(); resolve({ ok, ...info }); };
+    v.playsInline = true;
     const timer = setTimeout(() => done(false, { reason: 'timeout' }), 12000);
     v.addEventListener('error', () => { clearTimeout(timer); done(false, { reason: 'error' }); });
     v.addEventListener('loadedmetadata', () => {

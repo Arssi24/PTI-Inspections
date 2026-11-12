@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Set Up Your Goals</title>
+<link rel="stylesheet" href="css/style.css" />
+<link rel="manifest" href="manifest.json" />
+</head>
+<body>
+
+<div class="screen">
+  <div class="container">
+
+    <div class="nav-row">
+      <button class="back-btn hidden" id="backBtn" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#14151a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="progress-track" style="flex:1"><div class="progress-fill" id="progressFill" style="width:12.5%"></div></div>
+    </div>
+
+    <!-- Step 0: sex -->
+    <div class="step" data-step="0">
+      <h1 class="step-title">What's your sex?</h1>
+      <p class="step-subtitle">Used to calculate your calorie needs accurately.</p>
+      <div class="option-grid">
+        <button class="option-card" data-field="sex" data-value="male">Male</button>
+        <button class="option-card" data-field="sex" data-value="female">Female</button>
+      </div>
+    </div>
+
+    <!-- Step 1: age -->
+    <div class="step hidden" data-step="1">
+      <h1 class="step-title">How old are you?</h1>
+      <p class="step-subtitle">Age affects your metabolic rate.</p>
+      <div class="field-group">
+        <label class="field-label">Age</label>
+        <input class="field-input" type="number" inputmode="numeric" id="ageInput" placeholder="25" />
+      </div>
+    </div>
+
+    <!-- Step 2: height -->
+    <div class="step hidden" data-step="2">
+      <h1 class="step-title">How tall are you?</h1>
+      <div class="unit-toggle" id="heightUnitToggle">
+        <button data-unit="imperial" class="active">ft / in</button>
+        <button data-unit="metric">cm</button>
+      </div>
+      <div id="heightImperial">
+        <div class="field-row">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Feet</label>
+            <input class="field-input" type="number" inputmode="numeric" id="heightFeetInput" placeholder="5" />
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Inches</label>
+            <input class="field-input" type="number" inputmode="numeric" id="heightInchesInput" placeholder="9" />
+          </div>
+        </div>
+      </div>
+      <div id="heightMetric" class="hidden">
+        <div class="field-group">
+          <label class="field-label">Centimeters</label>
+          <input class="field-input" type="number" inputmode="numeric" id="heightCmInput" placeholder="175" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: weight -->
+    <div class="step hidden" data-step="3">
+      <h1 class="step-title">What's your current weight?</h1>
+      <div class="unit-toggle" id="weightUnitToggle">
+        <button data-unit="imperial" class="active">lbs</button>
+        <button data-unit="metric">kg</button>
+      </div>
+      <div class="field-group">
+        <label class="field-label" id="weightLabel">Weight (lbs)</label>
+        <input class="field-input" type="number" inputmode="numeric" id="weightInput" placeholder="160" />
+      </div>
+    </div>
+
+    <!-- Step 4: activity -->
+    <div class="step hidden" data-step="4">
+      <h1 class="step-title">How active are you?</h1>
+      <p class="step-subtitle">Outside of intentional exercise logging.</p>
+      <div class="option-grid" id="activityGrid"></div>
+    </div>
+
+    <!-- Step 5: goal -->
+    <div class="step hidden" data-step="5">
+      <h1 class="step-title">What's your goal?</h1>
+      <div class="option-grid">
+        <button class="option-card" data-field="goal" data-value="lose">Lose Weight<span class="option-desc">Calorie deficit, higher protein</span></button>
+        <button class="option-card" data-field="goal" data-value="maintain">Maintain Weight<span class="option-desc">Stay around your current weight</span></button>
+        <button class="option-card" data-field="goal" data-value="gain">Gain Weight<span class="option-desc">Calorie surplus for muscle gain</span></button>
+      </div>
+    </div>
+
+    <!-- Step 6: results -->
+    <div class="step hidden" data-step="6">
+      <h1 class="step-title">Your daily targets</h1>
+      <p class="step-subtitle">Based on the Mifflin-St Jeor formula. You can fine-tune these any time in Settings.</p>
+
+      <div class="result-card">
+        <div class="result-calorie" id="resultCalories">0</div>
+        <div class="result-calorie-label">Calories / day</div>
+        <div class="macro-row">
+          <div class="macro-pill">
+            <span class="dot" style="background:var(--protein)"></span><span class="macro-name">Protein</span>
+            <span class="macro-value" id="resultProtein">0g</span>
+          </div>
+          <div class="macro-pill">
+            <span class="dot" style="background:var(--carbs)"></span><span class="macro-name">Carbs</span>
+            <span class="macro-value" id="resultCarbs">0g</span>
+          </div>
+          <div class="macro-pill">
+            <span class="dot" style="background:var(--fat)"></span><span class="macro-name">Fat</span>
+            <span class="macro-value" id="resultFat">0g</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-secondary" id="customizeBtn">Customize targets manually</button>
+
+      <div class="hidden" id="customizeForm" style="margin-top:16px">
+        <div class="field-group">
+          <label class="field-label">Calories</label>
+          <input class="field-input" type="number" id="customCalories" />
+        </div>
+        <div class="field-row">
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Protein (g)</label>
+            <input class="field-input" type="number" id="customProtein" />
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Carbs (g)</label>
+            <input class="field-input" type="number" id="customCarbs" />
+          </div>
+          <div class="field-group" style="flex:1">
+            <label class="field-label">Fat (g)</label>
+            <input class="field-input" type="number" id="customFat" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <button class="btn-primary" id="nextBtn" disabled>Continue</button>
+
+  </div>
+</div>
+
+<script src="js/calculations.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/onboarding.js"></script>
+</body>
+</html>

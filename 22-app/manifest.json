@@ -1,0 +1,12 @@
+{
+  "name": "22 — with Kisra",
+  "short_name": "22",
+  "description": "A daily habit and learning companion with Kisra, a sarcastic crow.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0E0D12",
+  "theme_color": "#0E0D12",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

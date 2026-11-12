@@ -195,11 +195,15 @@ async function onLiveRecorderStopped() {
   diag.used = chosen === rebuilt ? 'rebuilt' : 'original';
   diag.rawInfo = await describeMp4(raw);
   diag.rebuiltInfo = rebuilt ? await describeMp4(rebuilt) : '(none)';
+  diag.keyInfo = REPAIR_STATS.video || '';
+  diag.picture = 'checking…';
   state.liveDiag = diag;
   state.liveRawBlob = raw;
   state.liveRebuiltBlob = rebuilt;
+  state.liveRebuiltNoAudio = null;
   await loadRecordedFile(new File([chosen], 'walkaround.mp4', { type: 'video/mp4' }));
   renderRecordingDiag();
+  measureFrameBrightness(chosen).then((r) => { diag.picture = r; refreshDiagText(); });
 }
 
 /* ---- "Recording details" panel on the review screen ---- */
@@ -232,6 +236,8 @@ function refreshDiagText() {
     `Recorder format: ${d.rawMime} (${d.rawKB} KB)`,
     d.rebuildError ? `Rebuild error: ${d.rebuildError}` : `Rebuilt check: ${d.rebuiltCheck}`,
     d.rawCheck !== 'not run' ? `Original check: ${d.rawCheck}` : '',
+    `Key frames: ${d.keyInfo}`,
+    `Picture: ${d.picture}`,
     '',
     'ORIGINAL FILE:', d.rawInfo,
     '',
@@ -249,17 +255,25 @@ function renderRecordingDiag() {
   refreshDiagText();
 }
 
-function playDiagVersion(which) {
-  const blob = which === 'raw' ? state.liveRawBlob : state.liveRebuiltBlob;
+async function playDiagVersion(which) {
+  let blob = which === 'raw' ? state.liveRawBlob : state.liveRebuiltBlob;
+  if (which === 'noaudio') {
+    if (!state.liveRebuiltNoAudio && state.liveRawBlob) {
+      try { state.liveRebuiltNoAudio = await repairMp4(state.liveRawBlob, { noAudio: true }); } catch (e) { alert('Could not build that version: ' + e.message); return; }
+    }
+    blob = state.liveRebuiltNoAudio;
+  }
   if (!blob) { alert('That version is not available.'); return; }
   const v = $('#record-video');
   revokePreviewUrl();
   state.previewVideoUrl = URL.createObjectURL(blob);
   v.src = state.previewVideoUrl;
   state.recordedVideoBlob = new File([blob], 'walkaround.mp4', { type: 'video/mp4' });
-  state.liveDiag.used = which === 'raw' ? 'original' : 'rebuilt';
+  state.liveDiag.used = which === 'raw' ? 'original' : which === 'noaudio' ? 'rebuilt (no audio)' : 'rebuilt';
   PLAYER_EVENTS.length = 0;
   logPlayerEvent(`switched to ${which}`);
+  state.liveDiag.picture = 'checking…';
+  measureFrameBrightness(blob).then((r) => { state.liveDiag.picture = `${which}: ${r}`; refreshDiagText(); });
   v.play().catch(() => {});
 }
 

@@ -281,33 +281,37 @@
         <div style="width:36px"></div>
       </header>
 
-      <div id="recorder-live" style="display:none;">
+      <div id="recorder-live" class="live-full" style="display:none;">
         <div class="live-video-wrap">
           <video id="live-video" playsinline muted autoplay></video>
           <div class="review-tap-overlay" id="live-tap-overlay" style="display:none;"></div>
           <div class="rec-badge" id="rec-badge" style="display:none;"><span class="rec-dot"></span><span id="rec-timer">0:00</span></div>
         </div>
-        <div class="video-info" id="live-cam-info"></div>
-        <div class="review-arm-hint" id="live-arm-hint" style="display:none;">Tap on the video, right where you see the problem. Recording keeps going.</div>
-        <div class="live-controls" id="live-controls">
-          <button class="live-side-btn" id="btn-torch" type="button" style="display:none;" title="Flashlight">
-            <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>
-            <span>Light</span>
-          </button>
-          <button class="rec-btn" id="btn-live-record" type="button" title="Record"><span class="rec-btn-inner"></span></button>
-          <button class="live-side-btn" id="btn-live-mark" type="button" disabled title="Mark a problem">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-            <span>Mark</span>
-          </button>
+        <button class="live-close" id="btn-live-close" type="button" title="Close">&times;</button>
+        <div class="live-cam-info" id="live-cam-info"></div>
+        <div class="live-warning" id="live-warning" style="display:none;"></div>
+        <div class="review-arm-hint live-arm-hint" id="live-arm-hint" style="display:none;">Tap on the video, right where you see the problem. Recording keeps going.</div>
+        <div class="live-bottom">
+          <div class="defect-count live-defect-count" id="live-defect-count"></div>
+          <div class="live-controls" id="live-controls">
+            <button class="live-side-btn" id="btn-torch" type="button" style="display:none;" title="Flashlight">
+              <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>
+              <span>Light</span>
+            </button>
+            <button class="rec-btn" id="btn-live-record" type="button" title="Record"><span class="rec-btn-inner"></span></button>
+            <button class="live-side-btn" id="btn-live-mark" type="button" disabled title="Mark a problem">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+              <span>Mark</span>
+            </button>
+          </div>
+          <div class="live-record-label" id="live-record-label">Tap to start recording</div>
+          <div class="live-torch-hint" id="live-torch-hint" style="display:none;">Need light? Turn on your phone's flashlight from Control Center before recording.</div>
+          <button class="live-fallback" id="btn-live-fallback" type="button">Use my Camera app instead</button>
         </div>
-        <div class="live-record-label" id="live-record-label">Tap to start recording</div>
-        <div class="live-torch-hint" id="live-torch-hint" style="display:none;">Need light? Turn on your phone's flashlight from Control Center before recording.</div>
-        <div class="defect-count live-defect-count" id="live-defect-count"></div>
         <div class="live-processing" id="live-processing" style="display:none;">
           <div class="live-spinner"></div>
           <div>Saving your video…</div>
         </div>
-        <button class="btn btn-secondary btn-block" id="btn-live-fallback" style="margin-top:14px;">Use my Camera app instead</button>
       </div>
 
       <div id="recorder-launching" class="card" style="display:none;text-align:center;">
@@ -330,6 +334,7 @@
         <div class="review-arm-hint" id="review-arm-hint" style="display:none;">Video paused. Tap on the video, right where you see the issue.</div>
 
         <div class="video-info" id="video-info"></div>
+        <div class="video-warning" id="video-warning" style="display:none;"></div>
         <details class="rec-diag" id="rec-diag" style="display:none;">
           <summary>Recording details</summary>
           <div class="rec-diag-btns">

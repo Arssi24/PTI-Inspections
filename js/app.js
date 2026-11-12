@@ -91,7 +91,12 @@ function initCustomVideoPlayer(video) {
   const timeLabel = bar.querySelector('.cvp-time');
   let dragging = false;
 
-  const safeDuration = () => (Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0);
+  // Safari's own recordings report no length, so fall back to the length we measured ourselves.
+  const safeDuration = () => {
+    if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
+    const known = parseFloat(video.dataset.knownDuration || '');
+    return known > 0 ? known : 0;
+  };
 
   function updateTime() {
     const dur = safeDuration();
@@ -295,6 +300,7 @@ async function init() {
   $('#btn-play-raw').addEventListener('click', () => playDiagVersion('raw'));
   $('#btn-play-rebuilt').addEventListener('click', () => playDiagVersion('rebuilt'));
   $('#btn-play-patched').addEventListener('click', () => playDiagVersion('patched'));
+  $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-live-mark').addEventListener('click', onLiveMarkToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
@@ -884,13 +890,14 @@ async function onNativeVideoSelected(e) {
   await loadRecordedFile(file);
 }
 
-async function loadRecordedFile(file) {
+async function loadRecordedFile(file, knownSec) {
   const video = $('#record-video');
+  video.dataset.knownDuration = knownSec > 0 ? String(knownSec) : '';
   revokePreviewUrl();
   state.previewVideoUrl = URL.createObjectURL(file);
   video.src = state.previewVideoUrl;
   initCustomVideoPlayer(video);
-  fixBrokenDuration(video);
+  if (!(knownSec > 0)) fixBrokenDuration(video);
 
   await new Promise((resolve) => {
     if (video.readyState >= 1) resolve();
@@ -910,7 +917,9 @@ async function loadRecordedFile(file) {
   }
 
   state.recordedVideoBlob = file;
-  state.recordedVideoDurationSec = Number.isFinite(video.duration) ? video.duration : 0;
+  const reported = Number.isFinite(video.duration) ? video.duration : 0;
+  // Trust our own timer when the player reports nothing, or a length that is clearly off.
+  state.recordedVideoDurationSec = knownSec > 0 && (!reported || Math.abs(reported - knownSec) > Math.max(3, knownSec * 0.2)) ? knownSec : reported;
   state.finalDurationSec = state.recordedVideoDurationSec;
 
   const min = MIN_SECONDS[state.currentType];
@@ -1844,7 +1853,7 @@ async function renderEntryCard(r, showDriver) {
   const videoHtml = videoUrl
     ? `<div class="entry-video-wrap">
          <div class="entry-video-loading">Loading video…</div>
-         <video playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}" data-marks="${escapeHtml(JSON.stringify((r.defects || []).map((d) => d.t)))}"></video>
+         <video playsinline preload="none" style="display:none;" data-remote-url="${videoUrl}" data-marks="${escapeHtml(JSON.stringify((r.defects || []).map((d) => d.t)))}" data-known-duration="${Number(r.duration_sec) || 0}"></video>
          <div class="entry-video-actions">
            <button class="entry-download-btn" data-video-url="${videoUrl}" data-video-name="${unit}-${r.type}-${r.id}.${videoUrl.includes('.mp4') ? 'mp4' : 'webm'}" type="button">
              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1997,7 +2006,7 @@ async function loadCardVideo(card) {
     applyMarks();
     video.style.display = 'block';
     if (loadingEl) loadingEl.style.display = 'none';
-    fixBrokenDuration(video);
+    if (!(parseFloat(video.dataset.knownDuration) > 0)) fixBrokenDuration(video);
   } catch (err) {
     console.error('Could not load video', err);
     if (loadingEl) loadingEl.textContent = 'Could not load video — check your connection and try again.';

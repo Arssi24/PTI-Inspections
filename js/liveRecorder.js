@@ -7,7 +7,14 @@ const LIVE_AUDIO_BPS = 128000;
 const LIVE = {
   stream: null, recorder: null, chunks: [], t0: 0, timer: null,
   recording: false, armed: false, torchOn: false, wakeLock: null, finalElapsed: 0,
+  frames: 0, lastFrameAt: 0, watchdog: null, stalled: false, events: [],
 };
+
+function logLiveEvent(text) {
+  const t = LIVE.recording ? liveElapsedSec().toFixed(1) + 's' : 'pre';
+  LIVE.events.push(`${t} ${text}`);
+  if (LIVE.events.length > 30) LIVE.events.shift();
+}
 
 function pickLiveMime() {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
@@ -53,6 +60,22 @@ async function startLiveCamera() {
   try { await v.play(); } catch (e) { /* autoplay handled by attribute */ }
   setupLiveTorch();
   setLiveControls('ready');
+  LIVE.events = [];
+  LIVE.frames = 0;
+  LIVE.lastFrameAt = performance.now();
+  const vtrack = LIVE.stream.getVideoTracks()[0];
+  if (vtrack) {
+    vtrack.addEventListener('mute', () => { logLiveEvent('camera track MUTED'); showLiveWarning('The camera stopped sending video. Keep the phone steady and the lens uncovered.'); });
+    vtrack.addEventListener('unmute', () => { logLiveEvent('camera track unmuted'); });
+    vtrack.addEventListener('ended', () => { logLiveEvent('camera track ENDED'); showLiveWarning('The camera stopped. Stop recording and start again.'); });
+  }
+  const countFrame = () => {
+    LIVE.frames++;
+    LIVE.lastFrameAt = performance.now();
+    if (LIVE.stream && v.requestVideoFrameCallback) v.requestVideoFrameCallback(countFrame);
+  };
+  if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(countFrame);
+  document.addEventListener('visibilitychange', onLiveVisibility);
   try {
     const s = LIVE.stream.getVideoTracks()[0].getSettings();
     const info = $('#live-cam-info');
@@ -64,6 +87,8 @@ async function startLiveCamera() {
 
 function stopLiveCamera() {
   if (LIVE.timer) { clearInterval(LIVE.timer); LIVE.timer = null; }
+  if (LIVE.watchdog) { clearInterval(LIVE.watchdog); LIVE.watchdog = null; }
+  document.removeEventListener('visibilitychange', onLiveVisibility);
   if (LIVE.recorder && LIVE.recorder.state !== 'inactive') {
     LIVE.recorder.onstop = null;
     try { LIVE.recorder.stop(); } catch (e) { /* already stopped */ }
@@ -125,7 +150,7 @@ function setLiveControls(mode) {
   $('#btn-live-mark').disabled = mode !== 'recording';
   $('#rec-badge').style.display = mode === 'recording' ? 'flex' : 'none';
   $('#live-controls').style.display = mode === 'processing' ? 'none' : 'flex';
-  $('#live-processing').style.display = mode === 'processing' ? 'block' : 'none';
+  $('#live-processing').style.display = mode === 'processing' ? 'flex' : 'none';
   $('#live-record-label').textContent = mode === 'recording' ? 'Tap to stop' : 'Tap to start recording';
   if (mode !== 'recording') disarmLiveMark();
 }
@@ -157,6 +182,22 @@ function startLiveRecording() {
   LIVE.timer = setInterval(() => { $('#rec-timer').textContent = fmtTime(liveElapsedSec()); }, 250);
   requestLiveWakeLock();
   setLiveControls('recording');
+  hideLiveWarning();
+  LIVE.stalled = false;
+  LIVE.watchdog = setInterval(() => {
+    if (!LIVE.recording) return;
+    const gap = performance.now() - LIVE.lastFrameAt;
+    if (gap > 2500 && !LIVE.stalled) {
+      LIVE.stalled = true;
+      logLiveEvent(`preview video stalled (${(gap / 1000).toFixed(1)}s without a frame)`);
+      showLiveWarning('Video stopped updating. Keep the lens uncovered. If it stays frozen, stop and record again.');
+    } else if (gap < 1000 && LIVE.stalled) {
+      LIVE.stalled = false;
+      logLiveEvent('preview video resumed');
+      hideLiveWarning();
+    }
+  }, 700);
+  logLiveEvent('recording started');
 }
 
 function stopLiveRecording() {
@@ -175,24 +216,27 @@ async function onLiveRecorderStopped() {
   LIVE.chunks = [];
   stopLiveCamera();
 
-  // Safari's file plays fine but reports no length. Fill the length in; if that fails for any
-  // reason, fall back to the untouched original.
-  let patched = null;
+  // Safari's own file is the one thing that plays correctly, so it is kept exactly as recorded.
+  // Edited copies (patched / rebuilt) are still available in the details panel for comparison.
   const diag = { used: 'original', rawInfo: '', patchedInfo: '', patchError: '', rawMime: mime, rawKB: Math.round(raw.size / 1024), picture: 'open this panel to measure', ready: false };
-  try {
-    patched = await patchMp4Durations(raw);
-    diag.used = 'patched original';
-  } catch (err) {
-    console.warn('Video length patch failed:', err);
-    diag.patchError = String(err && err.message ? err.message : err);
-  }
-  const chosen = patched || raw;
   state.liveDiag = diag;
   state.liveRawBlob = raw;
-  state.livePatchedBlob = patched;
+  state.livePatchedBlob = null;
   state.liveRebuiltBlob = null;
-  await loadRecordedFile(new File([chosen], 'walkaround.mp4', { type: 'video/mp4' }));
+  diag.events = LIVE.events.slice();
+  diag.liveFrames = LIVE.frames;
+  await loadRecordedFile(new File([raw], 'walkaround.mp4', { type: 'video/mp4' }), LIVE.finalElapsed);
   renderRecordingDiag();
+  const cut = await checkVideoCutShort(raw, LIVE.finalElapsed);
+  const warn = document.getElementById('video-warning');
+  if (warn) {
+    if (cut) {
+      warn.textContent = `Heads up: the picture stopped at ${fmtTime(cut.lastFrameAt)} but sound kept recording until ${fmtTime(cut.totalSec)}. The rest of this video will show a frozen frame. Please record again.`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
 }
 
 async function fillDiagDetails() {
@@ -200,9 +244,8 @@ async function fillDiagDetails() {
   if (!d || d.ready) return;
   d.ready = true;
   d.rawInfo = await describeMp4(state.liveRawBlob);
-  d.patchedInfo = state.livePatchedBlob ? await describeMp4(state.livePatchedBlob) : '(none)';
   refreshDiagText();
-  const current = d.used === 'original' ? state.liveRawBlob : state.livePatchedBlob;
+  const current = state.liveRawBlob;
   if (current) measureFrameBrightness(current).then((r) => { d.picture = r; refreshDiagText(); });
 }
 
@@ -244,6 +287,9 @@ function refreshDiagText() {
     d.rebuiltInfo ? 'REBUILT FILE:' : '', d.rebuiltInfo || '',
     d.keyInfo ? d.keyInfo : '',
     '',
+    `Preview frames counted: ${d.liveFrames == null ? '-' : d.liveFrames}`,
+    'RECORDING EVENTS:', (d.events && d.events.length ? d.events.join('\n') : '(none)'),
+    '',
     'PLAYER EVENTS:', PLAYER_EVENTS.join('\n') || '(none)',
   ].filter((x) => x !== '').join('\n');
 }
@@ -259,7 +305,12 @@ function renderRecordingDiag() {
 async function playDiagVersion(which) {
   let blob = null;
   if (which === 'raw') blob = state.liveRawBlob;
-  else if (which === 'patched') blob = state.livePatchedBlob;
+  else if (which === 'patched') {
+    if (!state.livePatchedBlob && state.liveRawBlob) {
+      try { state.livePatchedBlob = await patchMp4Durations(state.liveRawBlob); } catch (e) { alert('Could not build that version: ' + e.message); return; }
+    }
+    blob = state.livePatchedBlob;
+  }
   else if (which === 'rebuilt') {
     if (!state.liveRebuiltBlob && state.liveRawBlob) {
       try {
@@ -282,6 +333,48 @@ async function playDiagVersion(which) {
   state.liveDiag.picture = 'checking…';
   measureFrameBrightness(blob).then((r) => { state.liveDiag.picture = `${which}: ${r}`; refreshDiagText(); });
   v.play().catch(() => {});
+}
+
+function showLiveWarning(text) {
+  const el = document.getElementById('live-warning');
+  if (el) { el.textContent = text; el.style.display = 'block'; }
+}
+
+function hideLiveWarning() {
+  const el = document.getElementById('live-warning');
+  if (el) el.style.display = 'none';
+}
+
+function onLiveVisibility() {
+  logLiveEvent(`page ${document.visibilityState}`);
+  if (document.visibilityState === 'hidden' && LIVE.recording) showLiveWarning('Recording was interrupted when the app left the screen.');
+}
+
+// Safari sometimes keeps recording sound after the picture has stopped. Look at the finished file
+// and say so, instead of letting a half-recorded video go upload unnoticed.
+async function checkVideoCutShort(blob, totalSec) {
+  try {
+    const buf = await blob.arrayBuffer();
+    buf.fileStart = 0;
+    const f = MP4Box.createFile();
+    let info = null;
+    f.onError = () => {};
+    f.onReady = (i) => { info = i; };
+    f.appendBuffer(buf);
+    f.flush();
+    if (!info) return null;
+    const vt = info.tracks.find((t) => t.video);
+    if (!vt) return null;
+    const list = f.getTrackSamplesInfo(vt.id) || [];
+    if (!list.length) return null;
+    const last = list[list.length - 1];
+    const lastFrameAt = last.dts / vt.timescale;
+    const frames = list.length;
+    if (totalSec - lastFrameAt > 3) return { lastFrameAt, totalSec, frames };
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 /* ---- marking a problem while recording ---- */

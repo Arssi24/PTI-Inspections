@@ -1968,24 +1968,30 @@ async function loadCardVideo(card) {
     try { if (video.cvpSetMarks) video.cvpSetMarks(JSON.parse(video.dataset.marks || '[]')); } catch (e) { /* no marks */ }
   };
   try {
-    // Full-quality videos are large, so stream them straight from storage (the server
-    // supports range requests) and only fall back to downloading the whole file first if
-    // the browser can't play the stream.
-    await new Promise((resolve, reject) => {
-      video.preload = 'metadata';
-      video.addEventListener('loadedmetadata', resolve, { once: true });
-      video.addEventListener('error', () => reject(new Error('stream failed')), { once: true });
-      video.src = remoteUrl;
-      setTimeout(() => reject(new Error('stream timeout')), 15000);
-    }).catch(async () => {
-      const res = await fetch(remoteUrl);
-      if (!res.ok) throw new Error(`Could not fetch video (${res.status})`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      state.activeVideoObjectUrls.push(objectUrl);
-      video.removeAttribute('src');
-      video.src = objectUrl;
-    });
+    // Download the whole file first and play it locally. Streaming straight from the remote
+    // URL is what made Safari stall after a couple of seconds, so this is the reliable path.
+    const res = await fetch(remoteUrl);
+    if (!res.ok) throw new Error(`Could not fetch video (${res.status})`);
+    const total = Number(res.headers.get('content-length')) || 0;
+    let blob;
+    if (res.body && res.body.getReader && total) {
+      const reader = res.body.getReader();
+      const parts = [];
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        got += value.length;
+        if (loadingEl) loadingEl.textContent = `Loading video… ${Math.min(99, Math.round((got / total) * 100))}%`;
+      }
+      blob = new Blob(parts, { type: res.headers.get('content-type') || 'video/mp4' });
+    } else {
+      blob = await res.blob();
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    state.activeVideoObjectUrls.push(objectUrl);
+    video.src = objectUrl;
     initCustomVideoPlayer(video);
     applyMarks();
     video.style.display = 'block';

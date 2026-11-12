@@ -85,9 +85,16 @@ async function repairMp4(blob, opts = {}) {
   if (!vBox) throw new Error('no video codec config');
   const vDescription = mp4DescriptionFromBox(vBox);
 
+  // Keep the camera's rotation setting; without it the picture comes out turned or flipped.
+  const rawMatrix = trakOf(vTrack.id).tkhd.matrix;
+  const rotation = rawMatrix && rawMatrix.length === 9
+    ? Array.from(rawMatrix, (v, i) => v / ([2, 5, 8].includes(i) ? 1073741824 : 65536))
+    : 0;
+  REPAIR_STATS.matrix = rawMatrix ? Array.from(rawMatrix).join(',') : 'none';
+
   const options = {
     target: new Mp4Muxer.ArrayBufferTarget(),
-    video: { codec: vCodec, width: vTrack.video.width, height: vTrack.video.height },
+    video: { codec: vCodec, width: vTrack.video.width, height: vTrack.video.height, rotation },
     fastStart: 'in-memory',
     firstTimestampBehavior: 'cross-track-offset',
   };
@@ -238,4 +245,82 @@ function verifyPlayable(blob) {
     });
     v.src = url;
   });
+}
+
+// Keeps the recorder's own file exactly as it is (frames, rotation, structure) and only fills in
+// the lengths that Safari leaves at zero. This is the least invasive fix: Safari already plays the
+// original, it just doesn't report how long it is.
+async function patchMp4Durations(blob) {
+  if (typeof MP4Box === 'undefined') throw new Error('mp4box missing');
+  const buf = await blob.arrayBuffer();
+  const parseBuf = buf.slice(0);
+  parseBuf.fileStart = 0;
+
+  const file = MP4Box.createFile();
+  const sums = {};
+  const timescales = {};
+  let tracksInfo = null;
+  await new Promise((resolve, reject) => {
+    file.onError = (e) => reject(new Error('mp4 parse error: ' + e));
+    file.onReady = (info) => {
+      tracksInfo = info.tracks;
+      info.tracks.forEach((t) => { sums[t.id] = 0; timescales[t.id] = t.timescale; file.setExtractionOptions(t.id, null, { nbSamples: 500 }); });
+      file.start();
+    };
+    file.onSamples = (id, user, samples) => { for (const s of samples) sums[id] += s.duration; };
+    file.appendBuffer(parseBuf);
+    file.flush();
+    setTimeout(resolve, 0);
+  });
+  if (!tracksInfo) throw new Error('no moov');
+
+  const movieTimescale = file.moov.mvhd.timescale;
+  let movieDuration = 0;
+  tracksInfo.forEach((t) => { movieDuration = Math.max(movieDuration, Math.round((sums[t.id] / timescales[t.id]) * movieTimescale)); });
+  if (!movieDuration) throw new Error('no samples');
+
+  const u8 = new Uint8Array(buf);
+  const dv = new DataView(buf);
+  const boxes = (start, end) => {
+    const out = [];
+    let p = start;
+    while (p + 8 <= end) {
+      let size = dv.getUint32(p);
+      const type = String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
+      let header = 8;
+      if (size === 1) { size = dv.getUint32(p + 12); header = 16; }
+      else if (size === 0) size = end - p;
+      if (size < header || p + size > end) break;
+      out.push({ type, start: p, end: p + size, body: p + header });
+      p += size;
+    }
+    return out;
+  };
+  const setDur = (boxStart, v0Offset, v1Offset, value) => {
+    const version = u8[boxStart + 8];
+    if (version === 1) { dv.setUint32(boxStart + v1Offset, Math.floor(value / 4294967296)); dv.setUint32(boxStart + v1Offset + 4, value >>> 0); }
+    else dv.setUint32(boxStart + v0Offset, value >>> 0);
+  };
+  const trackIdOf = (tkhd) => (u8[tkhd.start + 8] === 1 ? dv.getUint32(tkhd.start + 28) : dv.getUint32(tkhd.start + 20));
+
+  const moov = boxes(0, u8.length).find((b) => b.type === 'moov');
+  if (!moov) throw new Error('no moov box');
+  let patched = 0;
+  for (const b of boxes(moov.body, moov.end)) {
+    if (b.type === 'mvhd') { setDur(b.start, 24, 32, movieDuration); patched++; }
+    if (b.type === 'trak') {
+      const kids = boxes(b.body, b.end);
+      const tkhd = kids.find((k) => k.type === 'tkhd');
+      const mdia = kids.find((k) => k.type === 'mdia');
+      if (!tkhd || !mdia) continue;
+      const id = trackIdOf(tkhd);
+      const mdhd = boxes(mdia.body, mdia.end).find((k) => k.type === 'mdhd');
+      if (sums[id] === undefined || !mdhd) continue;
+      setDur(tkhd.start, 28, 36, Math.round((sums[id] / timescales[id]) * movieTimescale));
+      setDur(mdhd.start, 24, 32, sums[id]);
+      patched += 2;
+    }
+  }
+  if (!patched) throw new Error('nothing patched');
+  return new Blob([buf], { type: 'video/mp4' });
 }

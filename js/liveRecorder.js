@@ -169,18 +169,18 @@ async function onLiveRecorderStopped() {
   stopLiveCamera();
 
   let chosen = null;
-  let rebuilt = null;
-  const diag = { used: '', rawInfo: '', rebuiltInfo: '', rebuiltCheck: 'not run', rawCheck: 'not run', rebuildError: '', rawMime: mime, rawKB: Math.round(raw.size / 1024) };
+  let patched = null;
+  const diag = { used: '', rawInfo: '', patchedInfo: '', patchedCheck: 'not run', rawCheck: 'not run', patchError: '', rawMime: mime, rawKB: Math.round(raw.size / 1024), picture: 'checking…' };
   try {
-    rebuilt = await repairMp4(raw);
-    const check = await verifyPlayable(rebuilt);
-    diag.rebuiltCheck = JSON.stringify(check);
+    patched = await patchMp4Durations(raw);
+    const check = await verifyPlayable(patched);
+    diag.patchedCheck = JSON.stringify(check);
     // A timeout is inconclusive (some browsers won't preload an unattached video), not a failure.
-    if (check.ok || check.reason === 'timeout') chosen = rebuilt;
-    else console.warn('Rebuilt video failed playback check', check);
+    if (check.ok || check.reason === 'timeout') chosen = patched;
+    else console.warn('Patched video failed playback check', check);
   } catch (err) {
-    console.warn('Video rebuild failed:', err);
-    diag.rebuildError = String(err && err.message ? err.message : err);
+    console.warn('Video length patch failed:', err);
+    diag.patchError = String(err && err.message ? err.message : err);
   }
   if (!chosen) {
     const rawCheck = await verifyPlayable(raw);
@@ -190,17 +190,15 @@ async function onLiveRecorderStopped() {
   if (!chosen) {
     const keep = confirm("We couldn't confirm this recording will play back properly. Press OK to keep it anyway, or Cancel to discard it and record again.");
     if (!keep) { enterRecordScreen(); return; }
-    chosen = rebuilt || raw;
+    chosen = patched || raw;
   }
-  diag.used = chosen === rebuilt ? 'rebuilt' : 'original';
+  diag.used = chosen === patched ? 'patched original' : 'original';
   diag.rawInfo = await describeMp4(raw);
-  diag.rebuiltInfo = rebuilt ? await describeMp4(rebuilt) : '(none)';
-  diag.keyInfo = REPAIR_STATS.video || '';
-  diag.picture = 'checking…';
+  diag.patchedInfo = patched ? await describeMp4(patched) : '(none)';
   state.liveDiag = diag;
   state.liveRawBlob = raw;
-  state.liveRebuiltBlob = rebuilt;
-  state.liveVariants = {};
+  state.livePatchedBlob = patched;
+  state.liveRebuiltBlob = null;
   await loadRecordedFile(new File([chosen], 'walkaround.mp4', { type: 'video/mp4' }));
   renderRecordingDiag();
   measureFrameBrightness(chosen).then((r) => { diag.picture = r; refreshDiagText(); });
@@ -234,14 +232,16 @@ function refreshDiagText() {
   el.textContent = [
     `Uploading: ${d.used}`,
     `Recorder format: ${d.rawMime} (${d.rawKB} KB)`,
-    d.rebuildError ? `Rebuild error: ${d.rebuildError}` : `Rebuilt check: ${d.rebuiltCheck}`,
+    d.patchError ? `Patch error: ${d.patchError}` : `Patched check: ${d.patchedCheck}`,
     d.rawCheck !== 'not run' ? `Original check: ${d.rawCheck}` : '',
-    `Key frames: ${d.keyInfo}`,
     `Picture: ${d.picture}`,
     '',
     'ORIGINAL FILE:', d.rawInfo,
     '',
-    'REBUILT FILE:', d.rebuiltInfo,
+    'PATCHED FILE:', d.patchedInfo,
+    d.rebuiltInfo ? '' : '',
+    d.rebuiltInfo ? 'REBUILT FILE:' : '', d.rebuiltInfo || '',
+    d.keyInfo ? d.keyInfo : '',
     '',
     'PLAYER EVENTS:', PLAYER_EVENTS.join('\n') || '(none)',
   ].filter((x) => x !== '').join('\n');
@@ -256,15 +256,18 @@ function renderRecordingDiag() {
 }
 
 async function playDiagVersion(which) {
-  let blob = which === 'raw' ? state.liveRawBlob : state.liveRebuiltBlob;
-  if (which === 'noaudio' || which === 'oldkeys') {
-    state.liveVariants = state.liveVariants || {};
-    if (!state.liveVariants[which] && state.liveRawBlob) {
+  let blob = null;
+  if (which === 'raw') blob = state.liveRawBlob;
+  else if (which === 'patched') blob = state.livePatchedBlob;
+  else if (which === 'rebuilt') {
+    if (!state.liveRebuiltBlob && state.liveRawBlob) {
       try {
-        state.liveVariants[which] = await repairMp4(state.liveRawBlob, which === 'noaudio' ? { noAudio: true } : { keyMode: 'flagged' });
+        state.liveRebuiltBlob = await repairMp4(state.liveRawBlob);
+        state.liveDiag.rebuiltInfo = await describeMp4(state.liveRebuiltBlob);
+        state.liveDiag.keyInfo = `${REPAIR_STATS.video || ''}\nmatrix: ${REPAIR_STATS.matrix || ''}`;
       } catch (e) { alert('Could not build that version: ' + e.message); return; }
     }
-    blob = state.liveVariants[which];
+    blob = state.liveRebuiltBlob;
   }
   if (!blob) { alert('That version is not available.'); return; }
   const v = $('#record-video');
@@ -272,7 +275,7 @@ async function playDiagVersion(which) {
   state.previewVideoUrl = URL.createObjectURL(blob);
   v.src = state.previewVideoUrl;
   state.recordedVideoBlob = new File([blob], 'walkaround.mp4', { type: 'video/mp4' });
-  state.liveDiag.used = which === 'raw' ? 'original' : which === 'noaudio' ? 'rebuilt (no audio)' : which === 'oldkeys' ? 'rebuilt (recorder keyframe flags)' : 'rebuilt';
+  state.liveDiag.used = which === 'raw' ? 'original' : which === 'patched' ? 'patched original' : 'rebuilt';
   PLAYER_EVENTS.length = 0;
   logPlayerEvent(`switched to ${which}`);
   state.liveDiag.picture = 'checking…';

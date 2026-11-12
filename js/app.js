@@ -293,8 +293,7 @@ async function init() {
   initPlayerEventLog();
   $('#btn-play-raw').addEventListener('click', () => playDiagVersion('raw'));
   $('#btn-play-rebuilt').addEventListener('click', () => playDiagVersion('rebuilt'));
-  $('#btn-play-noaudio').addEventListener('click', () => playDiagVersion('noaudio'));
-  $('#btn-play-oldkeys').addEventListener('click', () => playDiagVersion('oldkeys'));
+  $('#btn-play-patched').addEventListener('click', () => playDiagVersion('patched'));
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-live-mark').addEventListener('click', onLiveMarkToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);

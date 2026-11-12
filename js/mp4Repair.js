@@ -33,6 +33,21 @@ function isKeyFrameData(data, lenSize, hevc) {
   return false;
 }
 
+function nalTypesOf(data, lenSize, hevc) {
+  const out = [];
+  let p = 0;
+  const n = data.length;
+  while (p + lenSize <= n && out.length < 6) {
+    let len = 0;
+    for (let i = 0; i < lenSize; i++) len = (len * 256) + data[p + i];
+    p += lenSize;
+    if (len <= 0 || p + len > n) break;
+    out.push(hevc ? (data[p] >> 1) & 0x3f : data[p] & 0x1f);
+    p += len;
+  }
+  return out.join(',');
+}
+
 async function repairMp4(blob, opts = {}) {
   if (typeof MP4Box === 'undefined' || typeof Mp4Muxer === 'undefined') throw new Error('repair libs missing');
   const buf = await blob.arrayBuffer();
@@ -95,6 +110,8 @@ async function repairMp4(blob, opts = {}) {
   let keyFlagged = 0;
   let keyDetected = 0;
   let keyUsed = 0;
+  const keyMode = opts.keyMode || 'idr';
+  const flaggedNotes = [];
   vSamples.forEach((s, i) => {
     const meta = i === 0
       ? { decoderConfig: { codec: vTrack.codec, codedWidth: vTrack.video.width, codedHeight: vTrack.video.height, description: vDescription } }
@@ -105,11 +122,16 @@ async function repairMp4(blob, opts = {}) {
     const detected = isKeyFrameData(bytes, lenSize, vCodec === 'hevc');
     if (s.is_sync) keyFlagged++;
     if (detected) keyDetected++;
-    const isKey = i === 0 || s.is_sync || detected;
+    // Only real keyframes (IDR) are marked as sync points. The recorder's own flags marked
+    // ordinary frames as keyframes, which makes Safari reset its decoder and freeze the picture.
+    const isKey = i === 0 || (keyMode === 'flagged' ? (s.is_sync || detected) : detected);
     if (isKey) keyUsed++;
+    if (s.is_sync && flaggedNotes.length < 8) flaggedNotes.push(`#${i}:nal[${nalTypesOf(bytes, lenSize, vCodec === 'hevc')}]`);
     muxer.addVideoChunkRaw(bytes, isKey ? 'key' : 'delta', pts, us(s.duration, s.timescale), meta, pts - dts);
   });
-  REPAIR_STATS.video = `video samples=${vSamples.length} keyFlagged=${keyFlagged} keyDetected=${keyDetected} keyUsed=${keyUsed} lenSize=${lenSize} firstDts=${vSamples[0].dts} firstCts=${vSamples[0].cts} ts=${vSamples[0].timescale}`;
+  if (!opts.noAudio && !opts.keyMode) {
+    REPAIR_STATS.video = `video samples=${vSamples.length} keyFlagged=${keyFlagged} keyDetected=${keyDetected} keyUsed=${keyUsed} lenSize=${lenSize} firstDts=${vSamples[0].dts} ts=${vSamples[0].timescale}\nflagged samples: ${flaggedNotes.join(' ')} (nal 5 = real keyframe)`;
+  }
 
   if (aTrack && aDescription) {
     const aSamples = tracks[aTrack.id].samples;

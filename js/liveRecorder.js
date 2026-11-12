@@ -200,7 +200,7 @@ async function onLiveRecorderStopped() {
   state.liveDiag = diag;
   state.liveRawBlob = raw;
   state.liveRebuiltBlob = rebuilt;
-  state.liveRebuiltNoAudio = null;
+  state.liveVariants = {};
   await loadRecordedFile(new File([chosen], 'walkaround.mp4', { type: 'video/mp4' }));
   renderRecordingDiag();
   measureFrameBrightness(chosen).then((r) => { diag.picture = r; refreshDiagText(); });
@@ -257,11 +257,14 @@ function renderRecordingDiag() {
 
 async function playDiagVersion(which) {
   let blob = which === 'raw' ? state.liveRawBlob : state.liveRebuiltBlob;
-  if (which === 'noaudio') {
-    if (!state.liveRebuiltNoAudio && state.liveRawBlob) {
-      try { state.liveRebuiltNoAudio = await repairMp4(state.liveRawBlob, { noAudio: true }); } catch (e) { alert('Could not build that version: ' + e.message); return; }
+  if (which === 'noaudio' || which === 'oldkeys') {
+    state.liveVariants = state.liveVariants || {};
+    if (!state.liveVariants[which] && state.liveRawBlob) {
+      try {
+        state.liveVariants[which] = await repairMp4(state.liveRawBlob, which === 'noaudio' ? { noAudio: true } : { keyMode: 'flagged' });
+      } catch (e) { alert('Could not build that version: ' + e.message); return; }
     }
-    blob = state.liveRebuiltNoAudio;
+    blob = state.liveVariants[which];
   }
   if (!blob) { alert('That version is not available.'); return; }
   const v = $('#record-video');
@@ -269,7 +272,7 @@ async function playDiagVersion(which) {
   state.previewVideoUrl = URL.createObjectURL(blob);
   v.src = state.previewVideoUrl;
   state.recordedVideoBlob = new File([blob], 'walkaround.mp4', { type: 'video/mp4' });
-  state.liveDiag.used = which === 'raw' ? 'original' : which === 'noaudio' ? 'rebuilt (no audio)' : 'rebuilt';
+  state.liveDiag.used = which === 'raw' ? 'original' : which === 'noaudio' ? 'rebuilt (no audio)' : which === 'oldkeys' ? 'rebuilt (recorder keyframe flags)' : 'rebuilt';
   PLAYER_EVENTS.length = 0;
   logPlayerEvent(`switched to ${which}`);
   state.liveDiag.picture = 'checking…';

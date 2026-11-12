@@ -26,9 +26,16 @@ function liveElapsedSec() {
 async function startLiveCamera() {
   stopLiveCamera();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !pickLiveMime()) return false;
+  // Ask for a tall picture when the phone is held upright so the preview fills the screen.
+  const upright = window.innerHeight > window.innerWidth;
   try {
     LIVE.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: upright ? 1080 : 1920 },
+        height: { ideal: upright ? 1920 : 1080 },
+        frameRate: { ideal: 30 },
+      },
       audio: true,
     });
   } catch (err) {
@@ -168,40 +175,35 @@ async function onLiveRecorderStopped() {
   LIVE.chunks = [];
   stopLiveCamera();
 
-  let chosen = null;
+  // Safari's file plays fine but reports no length. Fill the length in; if that fails for any
+  // reason, fall back to the untouched original.
   let patched = null;
-  const diag = { used: '', rawInfo: '', patchedInfo: '', patchedCheck: 'not run', rawCheck: 'not run', patchError: '', rawMime: mime, rawKB: Math.round(raw.size / 1024), picture: 'checking…' };
+  const diag = { used: 'original', rawInfo: '', patchedInfo: '', patchError: '', rawMime: mime, rawKB: Math.round(raw.size / 1024), picture: 'open this panel to measure', ready: false };
   try {
     patched = await patchMp4Durations(raw);
-    const check = await verifyPlayable(patched);
-    diag.patchedCheck = JSON.stringify(check);
-    // A timeout is inconclusive (some browsers won't preload an unattached video), not a failure.
-    if (check.ok || check.reason === 'timeout') chosen = patched;
-    else console.warn('Patched video failed playback check', check);
+    diag.used = 'patched original';
   } catch (err) {
     console.warn('Video length patch failed:', err);
     diag.patchError = String(err && err.message ? err.message : err);
   }
-  if (!chosen) {
-    const rawCheck = await verifyPlayable(raw);
-    diag.rawCheck = JSON.stringify(rawCheck);
-    if (rawCheck.ok) chosen = raw;
-  }
-  if (!chosen) {
-    const keep = confirm("We couldn't confirm this recording will play back properly. Press OK to keep it anyway, or Cancel to discard it and record again.");
-    if (!keep) { enterRecordScreen(); return; }
-    chosen = patched || raw;
-  }
-  diag.used = chosen === patched ? 'patched original' : 'original';
-  diag.rawInfo = await describeMp4(raw);
-  diag.patchedInfo = patched ? await describeMp4(patched) : '(none)';
+  const chosen = patched || raw;
   state.liveDiag = diag;
   state.liveRawBlob = raw;
   state.livePatchedBlob = patched;
   state.liveRebuiltBlob = null;
   await loadRecordedFile(new File([chosen], 'walkaround.mp4', { type: 'video/mp4' }));
   renderRecordingDiag();
-  measureFrameBrightness(chosen).then((r) => { diag.picture = r; refreshDiagText(); });
+}
+
+async function fillDiagDetails() {
+  const d = state.liveDiag;
+  if (!d || d.ready) return;
+  d.ready = true;
+  d.rawInfo = await describeMp4(state.liveRawBlob);
+  d.patchedInfo = state.livePatchedBlob ? await describeMp4(state.livePatchedBlob) : '(none)';
+  refreshDiagText();
+  const current = d.used === 'original' ? state.liveRawBlob : state.livePatchedBlob;
+  if (current) measureFrameBrightness(current).then((r) => { d.picture = r; refreshDiagText(); });
 }
 
 /* ---- "Recording details" panel on the review screen ---- */
@@ -232,8 +234,7 @@ function refreshDiagText() {
   el.textContent = [
     `Uploading: ${d.used}`,
     `Recorder format: ${d.rawMime} (${d.rawKB} KB)`,
-    d.patchError ? `Patch error: ${d.patchError}` : `Patched check: ${d.patchedCheck}`,
-    d.rawCheck !== 'not run' ? `Original check: ${d.rawCheck}` : '',
+    d.patchError ? `Patch error: ${d.patchError}` : '',
     `Picture: ${d.picture}`,
     '',
     'ORIGINAL FILE:', d.rawInfo,

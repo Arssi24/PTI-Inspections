@@ -253,26 +253,25 @@ function verifyPlayable(blob) {
 async function patchMp4Durations(blob) {
   if (typeof MP4Box === 'undefined') throw new Error('mp4box missing');
   const buf = await blob.arrayBuffer();
-  const parseBuf = buf.slice(0);
-  parseBuf.fileStart = 0;
+  buf.fileStart = 0;
 
+  // Only the box headers and sample tables are read, not the video data, so this is fast.
   const file = MP4Box.createFile();
+  let tracksInfo = null;
+  file.onError = () => {};
+  file.onReady = (info) => { tracksInfo = info.tracks; };
+  file.appendBuffer(buf);
+  file.flush();
+  if (!tracksInfo) throw new Error('no moov');
   const sums = {};
   const timescales = {};
-  let tracksInfo = null;
-  await new Promise((resolve, reject) => {
-    file.onError = (e) => reject(new Error('mp4 parse error: ' + e));
-    file.onReady = (info) => {
-      tracksInfo = info.tracks;
-      info.tracks.forEach((t) => { sums[t.id] = 0; timescales[t.id] = t.timescale; file.setExtractionOptions(t.id, null, { nbSamples: 500 }); });
-      file.start();
-    };
-    file.onSamples = (id, user, samples) => { for (const s of samples) sums[id] += s.duration; };
-    file.appendBuffer(parseBuf);
-    file.flush();
-    setTimeout(resolve, 0);
+  tracksInfo.forEach((t) => {
+    const list = file.getTrackSamplesInfo(t.id) || [];
+    let sum = 0;
+    for (const s of list) sum += s.duration;
+    sums[t.id] = sum;
+    timescales[t.id] = t.timescale;
   });
-  if (!tracksInfo) throw new Error('no moov');
 
   const movieTimescale = file.moov.mvhd.timescale;
   let movieDuration = 0;

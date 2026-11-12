@@ -291,6 +291,7 @@ async function init() {
 
   $('#btn-manual-submit').addEventListener('click', onManualUnitSubmit);
   initPlayerEventLog();
+  $('#rec-diag').addEventListener('toggle', () => { if ($('#rec-diag').open) fillDiagDetails(); });
   $('#btn-play-raw').addEventListener('click', () => playDiagVersion('raw'));
   $('#btn-play-rebuilt').addEventListener('click', () => playDiagVersion('rebuilt'));
   $('#btn-play-patched').addEventListener('click', () => playDiagVersion('patched'));

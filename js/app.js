@@ -1071,22 +1071,48 @@ function onRetake() {
 
 let sharedAudioCtx = null;
 function playShutterSound() {
+  // Classic SLR / old phone camera "ka-chik": a sharp mechanical snap, then a lower, shorter snap.
   try {
     sharedAudioCtx = sharedAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const ctx = sharedAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
-    [{ delay: 0, freq: 1800 }, { delay: 0.06, freq: 1200 }].forEach(({ delay, freq }) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, now + delay);
-      gain.gain.linearRampToValueAtTime(0.25, now + delay + 0.003);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.04);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now + delay);
-      osc.stop(now + delay + 0.05);
+    const len = Math.floor(ctx.sampleRate * 0.2);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    const master = ctx.createDynamicsCompressor();
+    const out = ctx.createGain();
+    out.gain.value = 1.6;
+    master.connect(out); out.connect(ctx.destination);
+    const env = (g, t, peak, dur) => {
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    };
+    [
+      { t: 0.0,  hp: 1800, ping: 4200, nd: 0.02, pd: 0.05, body: 170, bd: 0.06, g: 1.0 },
+      { t: 0.085, hp: 1100, ping: 2900, nd: 0.03, pd: 0.07, body: 110, bd: 0.07, g: 0.9 },
+    ].forEach((c) => {
+      // snap of noise
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = c.hp;
+      const ng = ctx.createGain(); env(ng, now + c.t, 0.9 * c.g, c.nd);
+      src.connect(hp); hp.connect(ng); ng.connect(master);
+      src.start(now + c.t); src.stop(now + c.t + c.nd + 0.02);
+      // metallic ring
+      const src2 = ctx.createBufferSource(); src2.buffer = buf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = c.ping; bp.Q.value = 9;
+      const pg = ctx.createGain(); env(pg, now + c.t, 1.6 * c.g, c.pd);
+      src2.connect(bp); bp.connect(pg); pg.connect(master);
+      src2.start(now + c.t); src2.stop(now + c.t + c.pd + 0.02);
+      // body thump
+      const osc = ctx.createOscillator(); osc.type = 'triangle';
+      osc.frequency.setValueAtTime(c.body, now + c.t);
+      osc.frequency.exponentialRampToValueAtTime(c.body * 0.4, now + c.t + c.bd);
+      const og = ctx.createGain(); env(og, now + c.t, 0.7 * c.g, c.bd);
+      osc.connect(og); og.connect(master);
+      osc.start(now + c.t); osc.stop(now + c.t + c.bd + 0.02);
     });
   } catch (err) {
     console.warn('Could not play shutter sound', err);

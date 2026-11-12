@@ -60,6 +60,7 @@ function applyLiveFit(mode) {
   }
   const label = document.getElementById('live-fit-label');
   if (label) label.textContent = FIT_LABELS[mode];
+  updateLiveFrameBox();
 }
 
 function reapplyLiveFit() {
@@ -186,6 +187,7 @@ function drawLiveFrame(v) {
   LIVE.ctx.fillStyle = '#000';
   LIVE.ctx.fillRect(0, 0, W, H);
   LIVE.ctx.drawImage(v, (W - w) / 2, (H - h) / 2, w, h);
+  LIVE.drawRect = { x: (W - w) / 2, y: (H - h) / 2, w, h };
 }
 
 // Runs once per camera frame: counts it and, in stable mode, paints it onto the recording canvas.
@@ -196,6 +198,7 @@ function startLiveDrawLoop(v) {
     LIVE.frames++;
     LIVE.lastFrameAt = performance.now();
     if (LIVE.canvasMode) drawLiveFrame(v);
+    if (LIVE.frames % 12 === 1) updateLiveFrameBox();
     if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(step);
     else requestAnimationFrame(step);
   };
@@ -210,6 +213,8 @@ function stopLiveCamera() {
   document.removeEventListener('visibilitychange', onLiveVisibility);
   window.removeEventListener('orientationchange', onLiveOrientation);
   LIVE.loopToken++;
+  LIVE.drawRect = null;
+  { const fb = document.getElementById('live-cam-frame'); if (fb) fb.style.display = 'none'; }
   if (LIVE.cstream) {
     LIVE.cstream.getTracks().forEach((t) => t.stop());
     LIVE.cstream = null;
@@ -560,16 +565,64 @@ function liveContentRect(video) {
   return { left: cx - w / 2, top: cy - h / 2, width: w, height: h };
 }
 
+// Where the real camera picture sits on the screen (the black bars around it are not part of it).
+function liveCameraScreenRect() {
+  const wrap = document.querySelector('.live-video-wrap');
+  if (!wrap) return null;
+  const wr = wrap.getBoundingClientRect();
+  let r;
+  if (LIVE.canvasMode && LIVE.canvas && LIVE.drawRect) {
+    const cr = liveCanvasRect();
+    const k = cr.width / LIVE.canvas.width;
+    const d = LIVE.drawRect;
+    r = { left: cr.left + d.x * k, top: cr.top + d.y * k, width: d.w * k, height: d.h * k };
+  } else {
+    const video = $('#live-video');
+    if (!video || !video.videoWidth) return null;
+    r = liveContentRect(video);
+  }
+  // only the part that is actually visible on screen
+  const left = Math.max(r.left, wr.left);
+  const top = Math.max(r.top, wr.top);
+  const right = Math.min(r.left + r.width, wr.right);
+  const bottom = Math.min(r.top + r.height, wr.bottom);
+  if (right <= left || bottom <= top) return null;
+  return { left, top, width: right - left, height: bottom - top, wrap: wr };
+}
+
+// Thin outline around the camera picture so the driver can see where tapping marks a problem.
+function updateLiveFrameBox() {
+  const wrap = document.querySelector('.live-video-wrap');
+  if (!wrap) return;
+  let box = document.getElementById('live-cam-frame');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'live-cam-frame';
+    box.className = 'live-cam-frame';
+    wrap.appendChild(box);
+  }
+  const r = liveCameraScreenRect();
+  if (!r) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.style.left = (r.left - r.wrap.left) + 'px';
+  box.style.top = (r.top - r.wrap.top) + 'px';
+  box.style.width = r.width + 'px';
+  box.style.height = r.height + 'px';
+}
+
 function onLiveTapOverlay(e) {
   if (!LIVE.recording) return;
   const nowMs = performance.now();
   if (LIVE.lastMarkAt && nowMs - LIVE.lastMarkAt < 700) return;
-  LIVE.lastMarkAt = nowMs;
   const video = LIVE.canvasMode && LIVE.canvas ? LIVE.canvas : $('#live-video');
   const overlay = $('#live-tap-overlay');
   const rect = LIVE.canvasMode && LIVE.canvas ? liveCanvasRect() : liveContentRect(video);
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  // Taps on the black bars (outside the camera picture) do nothing.
+  const cam = liveCameraScreenRect();
+  if (!cam || clientX < cam.left || clientX > cam.left + cam.width || clientY < cam.top || clientY > cam.top + cam.height) return;
+  LIVE.lastMarkAt = nowMs;
   const xPct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   const yPct = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
 

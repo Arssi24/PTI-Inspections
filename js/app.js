@@ -302,7 +302,6 @@ async function init() {
   $('#btn-play-patched').addEventListener('click', () => playDiagVersion('patched'));
   $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
-  $('#btn-live-mark').addEventListener('click', onLiveMarkToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
   $('#live-tap-overlay').addEventListener('click', onLiveTapOverlay);
   $('#btn-retry-live').addEventListener('click', enterRecordScreen);

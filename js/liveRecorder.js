@@ -41,6 +41,7 @@ async function startLiveCamera() {
         facingMode: { ideal: 'environment' },
         width: { ideal: upright ? 1080 : 1920 },
         height: { ideal: upright ? 1920 : 1080 },
+        aspectRatio: { ideal: upright ? 9 / 16 : 16 / 9 },
         frameRate: { ideal: 30 },
       },
       audio: true,
@@ -80,7 +81,7 @@ async function startLiveCamera() {
     const s = LIVE.stream.getVideoTracks()[0].getSettings();
     const info = $('#live-cam-info');
     info.className = 'video-info' + (Math.min(s.width || 0, s.height || 0) < 1000 ? ' video-info-low' : '');
-    info.textContent = `Camera: ${Math.max(s.width || 0, s.height || 0)}×${Math.min(s.width || 0, s.height || 0)}${s.frameRate ? ' @ ' + Math.round(s.frameRate) + ' fps' : ''}`;
+    info.textContent = `Camera ${s.width || '?'}×${s.height || '?'}${s.frameRate ? ' @ ' + Math.round(s.frameRate) + ' fps' : ''} · preview ${v.videoWidth || '?'}×${v.videoHeight || '?'}`;
   } catch (e) { /* settings unavailable */ }
   return true;
 }
@@ -147,12 +148,12 @@ async function toggleLiveTorch() {
 function setLiveControls(mode) {
   $('#btn-live-record').classList.toggle('recording', mode === 'recording');
   $('#btn-live-record').disabled = mode === 'processing';
-  $('#btn-live-mark').disabled = mode !== 'recording';
+  $('#live-tap-overlay').style.display = mode === 'recording' ? 'block' : 'none';
   $('#rec-badge').style.display = mode === 'recording' ? 'flex' : 'none';
   $('#live-controls').style.display = mode === 'processing' ? 'none' : 'flex';
   $('#live-processing').style.display = mode === 'processing' ? 'flex' : 'none';
   $('#live-record-label').textContent = mode === 'recording' ? 'Tap to stop' : 'Tap to start recording';
-  if (mode !== 'recording') disarmLiveMark();
+  if (mode !== 'recording') hideLiveHint();
 }
 
 function onLiveRecordToggle() {
@@ -183,6 +184,7 @@ function startLiveRecording() {
   requestLiveWakeLock();
   setLiveControls('recording');
   hideLiveWarning();
+  showLiveHint('Tap anywhere on the screen to mark a problem', 5000);
   LIVE.stalled = false;
   LIVE.watchdog = setInterval(() => {
     if (!LIVE.recording) return;
@@ -379,40 +381,41 @@ async function checkVideoCutShort(blob, totalSec) {
 
 /* ---- marking a problem while recording ---- */
 
-function onLiveMarkToggle() {
-  if (!LIVE.recording) return;
-  if (LIVE.armed) { disarmLiveMark(); return; }
-  LIVE.armed = true;
-  $('#btn-live-mark').classList.add('active');
-  $('#live-arm-hint').style.display = 'block';
-  $('#live-tap-overlay').style.display = 'block';
+let liveHintTimer = null;
+
+function showLiveHint(text, ms) {
+  const h = document.getElementById('live-arm-hint');
+  if (!h) return;
+  h.textContent = text;
+  h.style.display = 'block';
+  if (liveHintTimer) clearTimeout(liveHintTimer);
+  liveHintTimer = setTimeout(() => { h.style.display = 'none'; }, ms);
 }
 
-function disarmLiveMark() {
-  LIVE.armed = false;
-  const b = document.getElementById('btn-live-mark');
-  if (b) b.classList.remove('active');
+function hideLiveHint() {
+  if (liveHintTimer) { clearTimeout(liveHintTimer); liveHintTimer = null; }
   const h = document.getElementById('live-arm-hint');
   if (h) h.style.display = 'none';
-  const o = document.getElementById('live-tap-overlay');
-  if (o) o.style.display = 'none';
 }
 
-// The video is letterboxed inside its element (object-fit: contain), so map the tap onto the
-// real picture area, not the element box.
+// The preview fills the screen (object-fit: cover), so part of the picture can sit off-screen.
+// Map a tap onto the full camera picture, including the cropped parts.
 function liveContentRect(video) {
   const r = video.getBoundingClientRect();
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) return r;
-  const scale = Math.min(r.width / vw, r.height / vh);
+  const scale = Math.max(r.width / vw, r.height / vh);
   const w = vw * scale;
   const h = vh * scale;
   return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, width: w, height: h };
 }
 
 function onLiveTapOverlay(e) {
-  if (!LIVE.armed || !LIVE.recording) return;
+  if (!LIVE.recording) return;
+  const nowMs = performance.now();
+  if (LIVE.lastMarkAt && nowMs - LIVE.lastMarkAt < 700) return;
+  LIVE.lastMarkAt = nowMs;
   const video = $('#live-video');
   const overlay = $('#live-tap-overlay');
   const rect = liveContentRect(video);
@@ -432,5 +435,5 @@ function onLiveTapOverlay(e) {
 
   capturePhotoWithMarker(xPct, yPct, video, liveElapsedSec());
   $('#live-defect-count').textContent = `${state.defects.length} problem${state.defects.length === 1 ? '' : 's'} marked`;
-  disarmLiveMark();
+  showLiveHint(`Marked at ${fmtTime(liveElapsedSec())}`, 1500);
 }

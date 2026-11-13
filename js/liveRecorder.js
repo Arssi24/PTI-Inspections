@@ -20,10 +20,10 @@ function wantWcMode() {
   try { return (localStorage.getItem('pti_rec_mode2') || 'wc') === 'wc'; } catch (e) { return true; }
 }
 
-// Camera view: 4:3 shows the whole sensor (wide, not zoomed in, like the Photo view);
-// 16:9 is the taller, more zoomed-in video view.
+// Camera view: '169' = full-screen vertical video like the Camera app (fills the whole screen);
+// '43' = wider 4:3 picture with black bars top and bottom.
 function liveAspect() {
-  try { return localStorage.getItem('pti_live_aspect') === '169' ? '169' : '43'; } catch (e) { return '43'; }
+  try { return localStorage.getItem('pti_live_aspect') === '43' ? '43' : '169'; } catch (e) { return '169'; }
 }
 
 function logLiveEvent(text) {
@@ -49,13 +49,15 @@ function liveScales(video) {
   return { contain, cover, wide: Math.sqrt(contain * cover) };
 }
 
-// The preview always shows the whole camera picture (nothing cropped or zoomed).
+// Full view fills the whole screen with the camera (only a sliver at the edges is trimmed on screen;
+// the recording keeps the whole picture). Wide view shows the whole 4:3 picture.
 function applyLiveFit() {
-  LIVE.fitMode = 'fit';
+  const full = liveAspect() === '169';
+  LIVE.fitMode = full ? 'cover' : 'fit';
   const v = document.getElementById('live-video');
-  if (v) v.style.transform = '';
+  if (v) { v.style.transform = ''; v.style.objectFit = full ? 'cover' : 'contain'; }
   const label = document.getElementById('live-fit-label');
-  if (label) label.textContent = liveAspect() === '43' ? 'Wide' : 'Tall';
+  if (label) label.textContent = full ? 'Full' : 'Wide';
   updateLiveFrameBox();
 }
 
@@ -63,7 +65,7 @@ function reapplyLiveFit() {
   if (LIVE.stream) applyLiveFit();
 }
 
-// Switch between the wide 4:3 view and the tall 16:9 view (restarts the camera).
+// Switch between the full-screen view and the wide 4:3 view (restarts the camera).
 async function toggleLiveFit() {
   if (LIVE.recording) return;
   try { localStorage.setItem('pti_live_aspect', liveAspect() === '43' ? '169' : '43'); } catch (e) { /* storage unavailable */ }
@@ -82,7 +84,7 @@ function liveElapsedSec() {
 async function startLiveCamera() {
   stopLiveCamera();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !pickLiveMime()) return false;
-  // Wide view = 4:3 (the camera's full picture); tall view = 16:9. Held upright, the sizes are turned.
+  // Full view = 9:16 vertical video (like the Camera app); wide view = 4:3. Held upright, the sizes are turned.
   const upright = window.innerHeight > window.innerWidth;
   const wide = liveAspect() === '43';
   const longSide = wide ? 1440 : 1920;
@@ -557,7 +559,8 @@ function liveContentRect(video) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) return r;
-  const scale = liveScales(video).contain;
+  const sc = liveScales(video);
+  const scale = LIVE.fitMode === 'cover' ? sc.cover : sc.contain;
   const w = vw * scale;
   const h = vh * scale;
   const cx = r.left + r.width / 2;
@@ -593,7 +596,7 @@ function updateLiveFrameBox() {
     box.className = 'live-cam-frame';
     wrap.appendChild(box);
   }
-  const r = liveCameraScreenRect();
+  const r = LIVE.fitMode === 'cover' ? null : liveCameraScreenRect();
   if (!r) { box.style.display = 'none'; return; }
   box.style.display = 'block';
   box.style.left = (r.left - r.wrap.left) + 'px';

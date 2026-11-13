@@ -1071,7 +1071,7 @@ function onRetake() {
 
 let sharedAudioCtx = null;
 function playShutterSound() {
-  // Classic SLR / old phone camera "ka-chik": a sharp mechanical snap, then a lower, shorter snap.
+  // iPhone-screenshot style: one quick bright camera "snap" with a tiny softer click right behind it.
   try {
     sharedAudioCtx = sharedAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const ctx = sharedAudioCtx;
@@ -1083,7 +1083,7 @@ function playShutterSound() {
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     const master = ctx.createDynamicsCompressor();
     const out = ctx.createGain();
-    out.gain.value = 1.6;
+    out.gain.value = 1.3;
     master.connect(out); out.connect(ctx.destination);
     const env = (g, t, peak, dur) => {
       g.gain.setValueAtTime(0.0001, t);
@@ -1091,8 +1091,8 @@ function playShutterSound() {
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     };
     [
-      { t: 0.0,  hp: 1800, ping: 4200, nd: 0.02, pd: 0.05, body: 170, bd: 0.06, g: 1.0 },
-      { t: 0.085, hp: 1100, ping: 2900, nd: 0.03, pd: 0.07, body: 110, bd: 0.07, g: 0.9 },
+      { t: 0.0,   hp: 2600, ping: 5200, nd: 0.016, pd: 0.035, body: 200, bd: 0.035, g: 1.0 },
+      { t: 0.052, hp: 1800, ping: 3300, nd: 0.02,  pd: 0.04,  body: 150, bd: 0.04,  g: 0.5 },
     ].forEach((c) => {
       // snap of noise
       const src = ctx.createBufferSource(); src.buffer = buf;

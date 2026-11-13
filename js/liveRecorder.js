@@ -20,10 +20,17 @@ function wantWcMode() {
   try { return (localStorage.getItem('pti_rec_mode2') || 'wc') === 'wc'; } catch (e) { return true; }
 }
 
-// Camera view: '169' = full-screen vertical video like the Camera app (fills the whole screen);
-// '43' = wider 4:3 picture with black bars top and bottom.
-function liveAspect() {
-  try { return localStorage.getItem('pti_live_aspect') === '43' ? '43' : '169'; } catch (e) { return '169'; }
+// Camera views:
+//   'uw'   = ultra-wide 0.5x lens, full-screen vertical (sees the most)
+//   'full' = normal 1x lens, full-screen vertical (like the Camera app)
+//   'wide' = 4:3 picture with black bars top and bottom
+const LIVE_VIEWS = ['uw', 'full', 'wide'];
+const LIVE_VIEW_LABELS = { uw: '0.5×', full: '1×', wide: '4:3' };
+function liveView() {
+  try {
+    const v = localStorage.getItem('pti_live_view');
+    return LIVE_VIEWS.includes(v) ? v : 'uw';
+  } catch (e) { return 'uw'; }
 }
 
 function logLiveEvent(text) {
@@ -52,12 +59,12 @@ function liveScales(video) {
 // Full view fills the whole screen with the camera (only a sliver at the edges is trimmed on screen;
 // the recording keeps the whole picture). Wide view shows the whole 4:3 picture.
 function applyLiveFit() {
-  const full = liveAspect() === '169';
+  const full = (LIVE.view || liveView()) !== 'wide';
   LIVE.fitMode = full ? 'cover' : 'fit';
   const v = document.getElementById('live-video');
   if (v) { v.style.transform = ''; v.style.objectFit = full ? 'cover' : 'contain'; }
   const label = document.getElementById('live-fit-label');
-  if (label) label.textContent = full ? 'Full' : 'Wide';
+  if (label) label.textContent = LIVE_VIEW_LABELS[LIVE.view || liveView()] || '1×';
   updateLiveFrameBox();
 }
 
@@ -65,10 +72,13 @@ function reapplyLiveFit() {
   if (LIVE.stream) applyLiveFit();
 }
 
-// Switch between the full-screen view and the wide 4:3 view (restarts the camera).
+// Cycle 0.5x -> 1x -> 4:3 (restarts the camera). Skips 0.5x on phones that have no ultra-wide lens.
 async function toggleLiveFit() {
   if (LIVE.recording) return;
-  try { localStorage.setItem('pti_live_aspect', liveAspect() === '43' ? '169' : '43'); } catch (e) { /* storage unavailable */ }
+  const cur = LIVE.view || liveView();
+  let next = LIVE_VIEWS[(LIVE_VIEWS.indexOf(cur) + 1) % LIVE_VIEWS.length];
+  if (next === 'uw' && LIVE.uwAvailable === false) next = 'full';
+  try { localStorage.setItem('pti_live_view', next); } catch (e) { /* storage unavailable */ }
   const ok = await startLiveCamera();
   if (!ok) showLiveWarning('Could not switch the camera view.');
 }
@@ -81,26 +91,52 @@ function liveElapsedSec() {
   return LIVE.recording ? (performance.now() - LIVE.t0) / 1000 : LIVE.finalElapsed;
 }
 
+// Looks for the phone's ultra-wide back lens and switches the camera to it (0.5x view).
+async function switchToUltraWideIfWanted(view, videoBase) {
+  LIVE.uwDevice = false;
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    logLiveEvent('cameras: ' + (devs.map((d) => d.label || '?').join(' | ') || 'none'));
+    const ultra = devs.find((d) => /ultra\s*-?\s*wide/i.test(d.label) && !/front/i.test(d.label));
+    LIVE.uwAvailable = Boolean(ultra);
+    if (view !== 'uw' || !ultra) return;
+    const cur = LIVE.stream.getVideoTracks()[0].getSettings().deviceId;
+    if (cur === ultra.deviceId) { LIVE.uwDevice = true; return; }
+    const s2 = await navigator.mediaDevices.getUserMedia({
+      video: Object.assign({ deviceId: { exact: ultra.deviceId } }, videoBase),
+      audio: true,
+    });
+    LIVE.stream.getTracks().forEach((t) => t.stop());
+    LIVE.stream = s2;
+    LIVE.uwDevice = true;
+  } catch (e) {
+    logLiveEvent('ultra-wide switch failed: ' + (e && e.message));
+  }
+}
+
 async function startLiveCamera() {
   stopLiveCamera();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !pickLiveMime()) return false;
-  // Full view = 9:16 vertical video (like the Camera app); wide view = 4:3. Held upright, the sizes are turned.
+  // Held upright: 0.5x / 1x views are 9:16 vertical video (like the Camera app); 4:3 view is wider.
   const upright = window.innerHeight > window.innerWidth;
-  const wide = liveAspect() === '43';
+  const view = liveView();
+  const wide = view === 'wide';
   const longSide = wide ? 1440 : 1920;
-  const shortSide = wide ? 1080 : 1080;
+  const shortSide = 1080;
   const ratio = wide ? 4 / 3 : 16 / 9;
+  LIVE.view = view;
+  const videoBase = {
+    width: { ideal: upright ? shortSide : longSide },
+    height: { ideal: upright ? longSide : shortSide },
+    aspectRatio: { ideal: upright ? 1 / ratio : ratio },
+    frameRate: { ideal: 30 },
+  };
   try {
     LIVE.stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: upright ? shortSide : longSide },
-        height: { ideal: upright ? longSide : shortSide },
-        aspectRatio: { ideal: upright ? 1 / ratio : ratio },
-        frameRate: { ideal: 30 },
-      },
+      video: Object.assign({ facingMode: { ideal: 'environment' } }, videoBase),
       audio: true,
     });
+    await switchToUltraWideIfWanted(view, videoBase);
   } catch (err) {
     console.warn('Live camera unavailable:', err);
     return false;
@@ -228,13 +264,23 @@ function setupLiveTorch() {
   hint.style.display = supported ? 'none' : 'block';
 }
 
-// Start at the camera's normal 1x view, like the regular Camera app, where the phone allows it.
+// 1x view: normal lens at 1x. 0.5x view: ultra-wide lens, or zoom 0.5 on phones that expose it as zoom.
 function setupLiveZoom() {
   const track = LIVE.stream && LIVE.stream.getVideoTracks()[0];
   const caps = track && track.getCapabilities ? track.getCapabilities() : {};
   if (caps && caps.zoom) {
-    const z = Math.min(caps.zoom.max || 1, Math.max(caps.zoom.min || 1, 1));
+    logLiveEvent(`zoom range ${caps.zoom.min}-${caps.zoom.max}`);
+    let target = 1;
+    if (LIVE.view === 'uw' && !LIVE.uwDevice && caps.zoom.min <= 0.6) { target = Math.max(0.5, caps.zoom.min); LIVE.uwAvailable = true; }
+    const z = Math.min(caps.zoom.max || 1, Math.max(caps.zoom.min || 1, target));
     track.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
+  }
+  if (LIVE.view === 'uw' && !LIVE.uwDevice && !(caps && caps.zoom && caps.zoom.min <= 0.6)) {
+    // no ultra-wide lens found: stay on the normal lens
+    LIVE.uwAvailable = false;
+    LIVE.view = 'full';
+    logLiveEvent('no ultra-wide lens found - using 1x');
+    applyLiveFit();
   }
 }
 

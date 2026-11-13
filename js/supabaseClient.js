@@ -90,6 +90,14 @@ async function sbRemoveDriver(userId) {
   return requireSb().from('profiles').delete().eq('id', userId);
 }
 
+// Name, login (email), password and assigned unit in one go (blank login/password = unchanged).
+async function sbManagerUpdateDriver(userId, { name, email, password, unit }) {
+  const { error } = await requireSb().rpc('manager_update_driver', {
+    p_driver_id: userId, p_name: name, p_email: email || '', p_password: password || '', p_unit: unit || '',
+  });
+  if (error) throw error;
+}
+
 async function sbUpdateDriver(userId, fields) {
   return requireSb().from('profiles').update(fields).eq('id', userId);
 }

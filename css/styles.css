@@ -618,3 +618,8 @@ body::before {
   .dash-header { flex-wrap: wrap; }
   .dash-header-right { width: 100%; justify-content: space-between; }
 }
+
+.driver-edit-label { display: block; font-size: 11.5px; font-weight: 700; color: var(--text-mute); margin: 8px 2px 3px; }
+.driver-edit-pwrow { display: flex; gap: 8px; align-items: center; }
+.driver-edit-pwrow .field { flex: 1; min-width: 0; }
+.driver-edit-pwrow .btn { flex-shrink: 0; padding: 10px 12px; }

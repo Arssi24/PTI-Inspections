@@ -127,15 +127,20 @@
     <div class="phone-shell">
       <div class="brand-block">
         <div class="brand-mark">YLM</div>
-        <h1>Reset your password</h1>
-        <p class="sub">We'll email you a link to set a new one</p>
+        <h1>Forgot your password?</h1>
+        <p class="sub">Contact your fleet manager</p>
       </div>
       <div class="card">
-        <label class="field-label">Email</label>
-        <input class="field" type="email" id="forgot-email" placeholder="you@company.com" autocomplete="email" />
-        <div class="field-error" id="forgot-error" style="display:none;"></div>
-        <button class="btn btn-primary btn-block" id="btn-send-reset">Send reset code</button>
-        <button class="btn btn-link btn-block" data-back="screen-login" type="button">Back to log in</button>
+        <p style="font-size:15.5px;line-height:1.5;margin:0 0 14px;text-align:center;">
+          Please <strong>contact your fleet manager</strong>. They can see your login and give you a new password in a few seconds.
+        </p>
+        <!-- Email reset is kept here (hidden) in case it is needed later. -->
+        <div style="display:none;">
+          <input class="field" type="email" id="forgot-email" placeholder="you@company.com" autocomplete="email" />
+          <div class="field-error" id="forgot-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="btn-send-reset">Send reset code</button>
+        </div>
+        <button class="btn btn-primary btn-block" data-back="screen-login" type="button">Back to log in</button>
       </div>
     </div>
   </section>
@@ -302,10 +307,7 @@
               <span>Light</span>
             </button>
             <button class="rec-btn" id="btn-live-record" type="button" title="Record"><span class="rec-btn-inner"></span></button>
-            <button class="live-side-btn" id="btn-live-fit" type="button" title="Switch between the full-screen and wide camera view">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-              <span id="live-fit-label">Full</span>
-            </button>
+            <div class="live-side-spacer"></div>
           </div>
           <div class="live-record-label" id="live-record-label">Tap to start recording</div>
           <div class="live-torch-hint" id="live-torch-hint" style="display:none;">Need light? Turn on your phone's flashlight from Control Center before recording.</div>
@@ -363,10 +365,6 @@
         </div>
         <div class="mark-chips" id="mark-chips"></div>
 
-        <button class="btn btn-secondary btn-block" id="btn-flag-defect">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-          Mark a Problem Spot
-        </button>
 
         <div class="min-warning" id="min-warning" style="display:none;">This video is shorter than the required minimum. Please retake.</div>
         <button class="btn btn-secondary btn-block" id="btn-retake">Delete &amp; Retake</button>

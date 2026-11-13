@@ -312,7 +312,6 @@ async function init() {
   $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
-  $('#btn-live-fit').addEventListener('click', toggleLiveFit);
   $('#live-tap-overlay').addEventListener('click', onLiveTapOverlay);
   $('#btn-retry-live').addEventListener('click', enterRecordScreen);
   $('#btn-live-fallback').addEventListener('click', () => {
@@ -323,7 +322,6 @@ async function init() {
   });
   $('#btn-select-video').addEventListener('click', openVideoLibrary);
   $('#native-library-input').addEventListener('change', onNativeVideoSelected);
-  $('#btn-flag-defect').addEventListener('click', onFlagDefectToggle);
   $('#review-tap-overlay').addEventListener('click', onReviewTapOverlay);
   $('#btn-retake').addEventListener('click', onRetake);
   $('#btn-save-upload').addEventListener('click', onSaveUpload);
@@ -1699,12 +1697,28 @@ function renderDriverRowView(row, d) {
   });
 }
 
+function randomDriverPassword() {
+  const letters = 'abcdefghjkmnpqrstuvwxyz';
+  let w = '';
+  for (let i = 0; i < 5; i++) w += letters[Math.floor(Math.random() * letters.length)];
+  return w + String(Math.floor(1000 + Math.random() * 9000));
+}
+
 function renderDriverRowEdit(row, d) {
   row.classList.add('driver-row-editing');
   row.innerHTML = `
     <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
     <div class="driver-row-info driver-edit-form">
+      <label class="driver-edit-label">Driver name</label>
       <input class="field field-inline driver-edit-name" value="${escapeHtml(d.name)}" placeholder="Driver name" />
+      <label class="driver-edit-label">Login (what the driver types to sign in)</label>
+      <input class="field field-inline driver-edit-email" type="text" autocapitalize="none" autocorrect="off" value="${escapeHtml(d.email)}" placeholder="name@gmail.com" />
+      <label class="driver-edit-label">New password (leave empty to keep the current one)</label>
+      <div class="driver-edit-pwrow">
+        <input class="field field-inline driver-edit-pass" type="text" autocapitalize="none" autocorrect="off" placeholder="New password" />
+        <button class="btn btn-secondary driver-edit-gen" type="button">Make one</button>
+      </div>
+      <label class="driver-edit-label">Assigned truck/trailer (optional)</label>
       <input class="field field-inline driver-edit-unit" value="${escapeHtml(d.assigned_unit || '')}" placeholder="Assigned truck/trailer (optional)" />
       <div class="driver-edit-actions">
         <button class="btn btn-secondary driver-edit-cancel" type="button">Cancel</button>
@@ -1712,18 +1726,35 @@ function renderDriverRowEdit(row, d) {
       </div>
     </div>
   `;
+  row.querySelector('.driver-edit-gen').addEventListener('click', () => {
+    row.querySelector('.driver-edit-pass').value = randomDriverPassword();
+  });
   row.querySelector('.driver-edit-cancel').addEventListener('click', () => renderDriverRowView(row, d));
   row.querySelector('.driver-edit-save').addEventListener('click', async () => {
     const newName = row.querySelector('.driver-edit-name').value.trim();
+    let newEmail = row.querySelector('.driver-edit-email').value.trim().toLowerCase();
+    const newPass = row.querySelector('.driver-edit-pass').value.trim();
     const newUnit = row.querySelector('.driver-edit-unit').value.trim();
     if (!newName) { alert('Name cannot be empty.'); return; }
+    if (!newEmail) newEmail = String(d.email || '').toLowerCase();
+    if (!newEmail.includes('@')) newEmail += '@gmail.com';
+    if (newPass && newPass.length < 6) { alert('The password needs at least 6 characters.'); return; }
+    const loginChanged = newEmail !== String(d.email || '').toLowerCase();
+    if (newPass && !confirm(`Set a new password for ${newName}? They will be signed out and must use the new one.`)) return;
     const saveBtn = row.querySelector('.driver-edit-save');
     saveBtn.disabled = true;
     try {
-      await sbUpdateDriver(d.id, { name: newName, assigned_unit: newUnit || null });
+      await sbManagerUpdateDriver(d.id, { name: newName, email: newEmail, password: newPass, unit: newUnit });
+      if (newPass || loginChanged) {
+        alert(`Saved. Tell ${newName}:\n\nLogin: ${newEmail}\n${newPass ? 'Password: ' + newPass : 'Password: unchanged'}\n\nWrite the password down now. It is stored scrambled, so it cannot be looked up later (just set a new one if it gets lost).`);
+      }
       renderDriversList();
     } catch (err) {
-      alert('Could not save changes — try again.');
+      console.error('Update driver failed', err);
+      const msg = err && err.message ? err.message : 'try again';
+      alert(/manager_update_driver|schema cache|does not exist/i.test(msg)
+        ? 'The database part of this feature is not installed yet. Ask for the one-time setup step.'
+        : 'Could not save: ' + msg);
       saveBtn.disabled = false;
     }
   });

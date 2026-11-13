@@ -27,10 +27,7 @@ function wantWcMode() {
 const LIVE_VIEWS = ['uw', 'full', 'wide'];
 const LIVE_VIEW_LABELS = { uw: '0.5×', full: '1×', wide: '4:3' };
 function liveView() {
-  try {
-    const v = localStorage.getItem('pti_live_view');
-    return LIVE_VIEWS.includes(v) ? v : 'uw';
-  } catch (e) { return 'uw'; }
+  return 'full'; // the 0.5x / 4:3 buttons were removed: always the normal lens, full screen
 }
 
 function logLiveEvent(text) {
@@ -259,7 +256,8 @@ function setupLiveTorch() {
   const track = LIVE.stream && LIVE.stream.getVideoTracks()[0];
   const caps = track && track.getCapabilities ? track.getCapabilities() : {};
   const supported = Boolean(caps && caps.torch);
-  btn.style.display = supported ? 'inline-flex' : 'none';
+  btn.style.display = 'inline-flex';
+  btn.style.visibility = supported ? 'visible' : 'hidden';
   btn.classList.remove('active');
   hint.style.display = supported ? 'none' : 'block';
 }
@@ -294,7 +292,7 @@ async function toggleLiveTorch() {
     $('#btn-torch').classList.toggle('active', next);
   } catch (err) {
     console.warn('Torch not available:', err);
-    $('#btn-torch').style.display = 'none';
+    $('#btn-torch').style.visibility = 'hidden';
     $('#live-torch-hint').style.display = 'block';
   }
 }

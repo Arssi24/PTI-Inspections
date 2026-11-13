@@ -301,13 +301,13 @@ async function init() {
   $('#btn-play-rebuilt').addEventListener('click', () => playDiagVersion('rebuilt'));
   $('#btn-play-patched').addEventListener('click', () => playDiagVersion('patched'));
   const showRecMode = () => {
-    const stable = wantCanvasMode();
-    $('#rec-mode-note').textContent = `Next recording uses: ${stable ? 'Stable (records a fixed-size picture)' : 'Direct (records the raw camera)'}`;
-    $('#btn-mode-canvas').classList.toggle('active', stable);
-    $('#btn-mode-direct').classList.toggle('active', !stable);
+    const wc = wantWcMode();
+    $('#rec-mode-note').textContent = `Next recording uses: ${wc ? 'the new recorder (own video writer)' : "Safari's built-in recorder"}`;
+    $('#btn-mode-canvas').classList.toggle('active', wc);
+    $('#btn-mode-direct').classList.toggle('active', !wc);
   };
-  $('#btn-mode-canvas').addEventListener('click', () => { try { localStorage.setItem('pti_rec_mode', 'canvas'); } catch (e) { /* ignore */ } showRecMode(); });
-  $('#btn-mode-direct').addEventListener('click', () => { try { localStorage.setItem('pti_rec_mode', 'direct'); } catch (e) { /* ignore */ } showRecMode(); });
+  $('#btn-mode-canvas').addEventListener('click', () => { try { localStorage.setItem('pti_rec_mode2', 'wc'); } catch (e) { /* ignore */ } showRecMode(); });
+  $('#btn-mode-direct').addEventListener('click', () => { try { localStorage.setItem('pti_rec_mode2', 'safari'); } catch (e) { /* ignore */ } showRecMode(); });
   showRecMode();
   $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);

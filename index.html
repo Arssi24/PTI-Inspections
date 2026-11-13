@@ -293,7 +293,7 @@
         <button class="live-close" id="btn-live-close" type="button" title="Close">&times;</button>
         <div class="live-cam-info" id="live-cam-info"></div>
         <div class="live-warning" id="live-warning" style="display:none;"></div>
-        <div class="review-arm-hint live-arm-hint" id="live-arm-hint" style="display:none;">Tap anywhere on the screen to mark a problem</div>
+        <div class="review-arm-hint live-arm-hint" id="live-arm-hint" style="display:none;">Tap the camera picture to mark a problem</div>
         <div class="live-bottom">
           <div class="defect-count live-defect-count" id="live-defect-count"></div>
           <div class="live-controls" id="live-controls">
@@ -302,9 +302,9 @@
               <span>Light</span>
             </button>
             <button class="rec-btn" id="btn-live-record" type="button" title="Record"><span class="rec-btn-inner"></span></button>
-            <button class="live-side-btn" id="btn-live-fit" type="button" title="Switch between filling the screen and showing the whole picture">
+            <button class="live-side-btn" id="btn-live-fit" type="button" title="Switch between the wide and tall camera view">
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-              <span id="live-fit-label">Fill</span>
+              <span id="live-fit-label">Wide</span>
             </button>
           </div>
           <div class="live-record-label" id="live-record-label">Tap to start recording</div>
@@ -346,8 +346,8 @@
             <button type="button" class="btn btn-secondary" id="btn-play-rebuilt">Play rebuilt</button>
           </div>
           <div class="rec-diag-btns">
-            <button type="button" class="btn btn-secondary" id="btn-mode-canvas">Recording mode: Stable</button>
-            <button type="button" class="btn btn-secondary" id="btn-mode-direct">Recording mode: Direct</button>
+            <button type="button" class="btn btn-secondary" id="btn-mode-canvas">Recorder: New (recommended)</button>
+            <button type="button" class="btn btn-secondary" id="btn-mode-direct">Recorder: Safari's own</button>
           </div>
           <div class="video-info" id="rec-mode-note"></div>
           <pre id="rec-diag-text"></pre>
@@ -516,7 +516,8 @@
 <script src="js/mp4box.all.min.js"></script>
 <script src="js/mp4-muxer.js"></script>
 <script src="js/mp4Repair.js"></script>
-<script src="js/liveRecorder.js"></script>
+<script src="js/wcRecorder.js"></script>
+  <script src="js/liveRecorder.js"></script>
 <script src="js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {

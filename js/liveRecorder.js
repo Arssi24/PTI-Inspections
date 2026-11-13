@@ -14,11 +14,16 @@ const LIVE = {
 // "Stable" mode records a fixed-size canvas that the camera is drawn onto, so the recorder never
 // sees the camera picture change shape (tilting the phone flat or turning it). Safari's recorder
 // stops writing video when that happens while the sound carries on.
-const LIVE_CANVAS_W = 1080;
-const LIVE_CANVAS_H = 1920;
 
-function wantCanvasMode() {
-  try { return (localStorage.getItem('pti_rec_mode') || 'canvas') === 'canvas'; } catch (e) { return true; }
+// "new" = our own recorder (wcRecorder.js, avoids Safari's recorder bug); "safari" = built-in MediaRecorder.
+function wantWcMode() {
+  try { return (localStorage.getItem('pti_rec_mode2') || 'wc') === 'wc'; } catch (e) { return true; }
+}
+
+// Camera view: 4:3 shows the whole sensor (wide, not zoomed in, like the Photo view);
+// 16:9 is the taller, more zoomed-in video view.
+function liveAspect() {
+  try { return localStorage.getItem('pti_live_aspect') === '169' ? '169' : '43'; } catch (e) { return '43'; }
 }
 
 function logLiveEvent(text) {
@@ -33,8 +38,6 @@ function pickLiveMime() {
   return candidates.find((m) => MediaRecorder.isTypeSupported(m)) || '';
 }
 
-const FIT_MODES = ['fit', 'wide', 'fill'];
-const FIT_LABELS = { fit: 'Fit', wide: 'Wide', fill: 'Fill' };
 
 function liveScales(video) {
   const cw = video.clientWidth || 1;
@@ -46,31 +49,26 @@ function liveScales(video) {
   return { contain, cover, wide: Math.sqrt(contain * cover) };
 }
 
-// Fit = whole picture, Fill = crops to cover the screen, Wide = in between.
-function applyLiveFit(mode) {
-  if (!FIT_MODES.includes(mode)) mode = 'wide';
-  LIVE.fitMode = mode;
+// The preview always shows the whole camera picture (nothing cropped or zoomed).
+function applyLiveFit() {
+  LIVE.fitMode = 'fit';
   const v = document.getElementById('live-video');
-  if (v && LIVE.canvasMode) {
-    v.style.transform = '';
-  } else if (v) {
-    const sc = liveScales(v);
-    const k = sc[mode === 'fit' ? 'contain' : mode === 'fill' ? 'cover' : 'wide'] / sc.contain;
-    v.style.transform = k > 1.001 ? `scale(${k.toFixed(4)})` : '';
-  }
+  if (v) v.style.transform = '';
   const label = document.getElementById('live-fit-label');
-  if (label) label.textContent = FIT_LABELS[mode];
+  if (label) label.textContent = liveAspect() === '43' ? 'Wide' : 'Tall';
   updateLiveFrameBox();
 }
 
 function reapplyLiveFit() {
-  if (LIVE.stream) applyLiveFit(LIVE.fitMode);
+  if (LIVE.stream) applyLiveFit();
 }
 
-function toggleLiveFit() {
-  const next = FIT_MODES[(FIT_MODES.indexOf(LIVE.fitMode || 'wide') + 1) % FIT_MODES.length];
-  applyLiveFit(next);
-  try { localStorage.setItem('pti_live_fit_mode', next); } catch (e) { /* storage unavailable */ }
+// Switch between the wide 4:3 view and the tall 16:9 view (restarts the camera).
+async function toggleLiveFit() {
+  if (LIVE.recording) return;
+  try { localStorage.setItem('pti_live_aspect', liveAspect() === '43' ? '169' : '43'); } catch (e) { /* storage unavailable */ }
+  const ok = await startLiveCamera();
+  if (!ok) showLiveWarning('Could not switch the camera view.');
 }
 
 function liveRecordingActive() {
@@ -84,15 +82,19 @@ function liveElapsedSec() {
 async function startLiveCamera() {
   stopLiveCamera();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !pickLiveMime()) return false;
-  // Ask for a tall picture when the phone is held upright so the preview fills the screen.
+  // Wide view = 4:3 (the camera's full picture); tall view = 16:9. Held upright, the sizes are turned.
   const upright = window.innerHeight > window.innerWidth;
+  const wide = liveAspect() === '43';
+  const longSide = wide ? 1440 : 1920;
+  const shortSide = wide ? 1080 : 1080;
+  const ratio = wide ? 4 / 3 : 16 / 9;
   try {
     LIVE.stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: upright ? 1080 : 1920 },
-        height: { ideal: upright ? 1920 : 1080 },
-        aspectRatio: { ideal: upright ? 9 / 16 : 16 / 9 },
+        width: { ideal: upright ? shortSide : longSide },
+        height: { ideal: upright ? longSide : shortSide },
+        aspectRatio: { ideal: upright ? 1 / ratio : ratio },
         frameRate: { ideal: 30 },
       },
       audio: true,
@@ -108,10 +110,10 @@ async function startLiveCamera() {
   }
   const v = $('#live-video');
   v.muted = true;
-  try { applyLiveFit(localStorage.getItem('pti_live_fit_mode') || 'wide'); } catch (e) { applyLiveFit('wide'); }
+  applyLiveFit();
   v.srcObject = LIVE.stream;
   try { await v.play(); } catch (e) { /* autoplay handled by attribute */ }
-  v.addEventListener('loadedmetadata', () => applyLiveFit(LIVE.fitMode), { once: true });
+  v.addEventListener('loadedmetadata', () => applyLiveFit(), { once: true });
   window.removeEventListener('resize', reapplyLiveFit);
   window.addEventListener('resize', reapplyLiveFit);
   setupLiveTorch();
@@ -122,28 +124,12 @@ async function startLiveCamera() {
   LIVE.lastFrameAt = performance.now();
 
   const cv = $('#live-canvas');
-  LIVE.canvasMode = wantCanvasMode() && typeof cv.captureStream === 'function';
-  if (LIVE.canvasMode) {
-    cv.width = LIVE_CANVAS_W;
-    cv.height = LIVE_CANVAS_H;
-    LIVE.canvas = cv;
-    LIVE.ctx = cv.getContext('2d', { alpha: false });
-    cv.style.display = 'block';
-    try {
-      LIVE.cstream = cv.captureStream(30);
-      LIVE.stream.getAudioTracks().forEach((t) => LIVE.cstream.addTrack(t));
-      LIVE.recStream = LIVE.cstream;
-    } catch (err) {
-      console.warn('Canvas capture failed, recording the camera directly:', err);
-      LIVE.canvasMode = false;
-      cv.style.display = 'none';
-      LIVE.recStream = LIVE.stream;
-    }
-  } else {
-    cv.style.display = 'none';
-    LIVE.recStream = LIVE.stream;
-  }
-  logLiveEvent(`recording pipeline: ${LIVE.canvasMode ? 'stable canvas ' + LIVE_CANVAS_W + 'x' + LIVE_CANVAS_H : 'direct camera'}`);
+  LIVE.canvasMode = false;
+  cv.style.display = 'none';
+  LIVE.canvas = cv;
+  LIVE.recStream = LIVE.stream;
+  LIVE.wc = wantWcMode() && wcSupported();
+  logLiveEvent(`recorder: ${LIVE.wc ? 'new (own encoder)' : 'Safari built-in'}${wantWcMode() && !wcSupported() ? ' (new one not supported here)' : ''}`);
   v.addEventListener('resize', onLiveVideoResize);
   window.addEventListener('orientationchange', onLiveOrientation);
   startLiveDrawLoop(v);
@@ -158,7 +144,7 @@ async function startLiveCamera() {
     const s = LIVE.stream.getVideoTracks()[0].getSettings();
     const info = $('#live-cam-info');
     info.className = 'video-info' + (Math.min(s.width || 0, s.height || 0) < 1000 ? ' video-info-low' : '');
-    info.textContent = `Camera ${s.width || '?'}×${s.height || '?'}${s.frameRate ? ' @ ' + Math.round(s.frameRate) + ' fps' : ''} · preview ${v.videoWidth || '?'}×${v.videoHeight || '?'}${LIVE.canvasMode ? ' · recording ' + LIVE_CANVAS_W + '×' + LIVE_CANVAS_H : ''}`;
+    info.textContent = `Camera ${s.width || '?'}×${s.height || '?'}${s.frameRate ? ' @ ' + Math.round(s.frameRate) + ' fps' : ''} · preview ${v.videoWidth || '?'}×${v.videoHeight || '?'}`;
   } catch (e) { /* settings unavailable */ }
   return true;
 }
@@ -172,37 +158,18 @@ function onLiveOrientation() {
   logLiveEvent(`phone orientation changed (${window.orientation !== undefined ? window.orientation + ' deg' : 'unknown'})`);
 }
 
-function drawLiveFrame(v) {
-  const vw = v.videoWidth;
-  const vh = v.videoHeight;
-  if (!vw || !vh || !LIVE.ctx) return;
-  const W = LIVE_CANVAS_W;
-  const H = LIVE_CANVAS_H;
-  const contain = Math.min(W / vw, H / vh);
-  const cover = Math.max(W / vw, H / vh);
-  const mode = LIVE.fitMode || 'wide';
-  const s = mode === 'fit' ? contain : mode === 'fill' ? cover : Math.sqrt(contain * cover);
-  const w = vw * s;
-  const h = vh * s;
-  LIVE.ctx.fillStyle = '#000';
-  LIVE.ctx.fillRect(0, 0, W, H);
-  LIVE.ctx.drawImage(v, (W - w) / 2, (H - h) / 2, w, h);
-  LIVE.drawRect = { x: (W - w) / 2, y: (H - h) / 2, w, h };
-}
-
-// Runs once per camera frame: counts it and, in stable mode, paints it onto the recording canvas.
+// Runs once per camera frame: counts it and, while recording with the new recorder, encodes it.
 function startLiveDrawLoop(v) {
   const token = ++LIVE.loopToken;
-  const step = () => {
+  const step = (now) => {
     if (token !== LIVE.loopToken || !LIVE.stream) return;
     LIVE.frames++;
     LIVE.lastFrameAt = performance.now();
-    if (LIVE.canvasMode) drawLiveFrame(v);
+    if (LIVE.wc && LIVE.recording && WC.on) wcOnFrame(v, typeof now === 'number' ? now : performance.now());
     if (LIVE.frames % 12 === 1) updateLiveFrameBox();
     if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(step);
     else requestAnimationFrame(step);
   };
-  if (LIVE.canvasMode) drawLiveFrame(v);
   if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(step);
   else requestAnimationFrame(step);
 }
@@ -213,7 +180,7 @@ function stopLiveCamera() {
   document.removeEventListener('visibilitychange', onLiveVisibility);
   window.removeEventListener('orientationchange', onLiveOrientation);
   LIVE.loopToken++;
-  LIVE.drawRect = null;
+  if (typeof wcAbort === 'function' && WC.on) wcAbort();
   { const fb = document.getElementById('live-cam-frame'); if (fb) fb.style.display = 'none'; }
   if (LIVE.cstream) {
     LIVE.cstream.getTracks().forEach((t) => t.stop());
@@ -301,48 +268,89 @@ function onLiveRecordToggle() {
   else startLiveRecording();
 }
 
-function startLiveRecording() {
-  if (!LIVE.stream) return;
-  const mimeType = pickLiveMime();
-  LIVE.chunks = [];
+async function startLiveRecording() {
+  if (!LIVE.stream || LIVE.starting) return;
+  LIVE.starting = true;
   try {
-    LIVE.recorder = new MediaRecorder(LIVE.recStream || LIVE.stream, { mimeType, videoBitsPerSecond: LIVE_VIDEO_BPS, audioBitsPerSecond: LIVE_AUDIO_BPS });
-  } catch (err) {
-    console.warn('MediaRecorder failed to start:', err);
-    alert('Could not start recording on this device. Use the Camera app instead.');
-    return;
-  }
-  LIVE.recorder.ondataavailable = (e) => { if (e.data && e.data.size) LIVE.chunks.push(e.data); };
-  LIVE.recorder.onstop = onLiveRecorderStopped;
-  LIVE.recorder.start();
-  LIVE.recording = true;
-  LIVE.t0 = performance.now();
-  state.defects = [];
-  $('#live-defect-count').textContent = '';
-  $('#rec-timer').textContent = '0:00';
-  LIVE.timer = setInterval(() => { $('#rec-timer').textContent = fmtTime(liveElapsedSec()); }, 250);
-  requestLiveWakeLock();
-  setLiveControls('recording');
-  hideLiveWarning();
-  showLiveHint('Tap anywhere on the screen to mark a problem', 5000);
-  LIVE.stalled = false;
-  LIVE.watchdog = setInterval(() => {
-    if (!LIVE.recording) return;
-    const gap = performance.now() - LIVE.lastFrameAt;
-    if (gap > 2500 && !LIVE.stalled) {
-      LIVE.stalled = true;
-      logLiveEvent(`preview video stalled (${(gap / 1000).toFixed(1)}s without a frame)`);
-      showLiveWarning('Video stopped updating. Keep the lens uncovered. If it stays frozen, stop and record again.');
-    } else if (gap < 1000 && LIVE.stalled) {
-      LIVE.stalled = false;
-      logLiveEvent('preview video resumed');
-      hideLiveWarning();
+    let usedWc = false;
+    if (LIVE.wc) {
+      // Must happen straight away inside the tap so iOS lets the microphone audio start.
+      wcPrepareAudioContext();
+      const r = await wcBegin($('#live-video'), LIVE.stream, LIVE.canvas);
+      if (r.ok) {
+        usedWc = true;
+        LIVE.chunks = [];
+        LIVE.recorder = null;
+        LIVE.wcMime = 'new recorder: ' + r.info;
+      } else {
+        logLiveEvent('new recorder unavailable (' + r.reason + ') - using Safari recorder');
+        LIVE.wc = false;
+      }
     }
-  }, 700);
-  logLiveEvent('recording started');
+    if (!usedWc) {
+      const mimeType = pickLiveMime();
+      LIVE.chunks = [];
+      try {
+        LIVE.recorder = new MediaRecorder(LIVE.recStream || LIVE.stream, { mimeType, videoBitsPerSecond: LIVE_VIDEO_BPS, audioBitsPerSecond: LIVE_AUDIO_BPS });
+      } catch (err) {
+        console.warn('MediaRecorder failed to start:', err);
+        alert('Could not start recording on this device. Use the Camera app instead.');
+        return;
+      }
+      LIVE.recorder.ondataavailable = (e) => { if (e.data && e.data.size) LIVE.chunks.push(e.data); };
+      LIVE.recorder.onstop = onLiveRecorderStopped;
+      LIVE.recorder.start();
+    }
+    LIVE.recording = true;
+    LIVE.t0 = performance.now();
+    if (usedWc) WC.t0 = LIVE.t0;
+    state.defects = [];
+    $('#live-defect-count').textContent = '';
+    $('#rec-timer').textContent = '0:00';
+    LIVE.timer = setInterval(() => { $('#rec-timer').textContent = fmtTime(liveElapsedSec()); }, 250);
+    requestLiveWakeLock();
+    setLiveControls('recording');
+    hideLiveWarning();
+    showLiveHint('Tap the camera picture to mark a problem', 5000);
+    LIVE.stalled = false;
+    LIVE.watchdog = setInterval(() => {
+      if (!LIVE.recording) return;
+      const gap = performance.now() - LIVE.lastFrameAt;
+      if (gap > 2500 && !LIVE.stalled) {
+        LIVE.stalled = true;
+        logLiveEvent(`preview video stalled (${(gap / 1000).toFixed(1)}s without a frame)`);
+        showLiveWarning('Video stopped updating. Keep the lens uncovered. If it stays frozen, stop and record again.');
+      } else if (gap < 1000 && LIVE.stalled) {
+        LIVE.stalled = false;
+        logLiveEvent('preview video resumed');
+        hideLiveWarning();
+      }
+      if (usedWc && WC.on) {
+        if (WC.error && !LIVE.wcErrShown) { LIVE.wcErrShown = true; logLiveEvent('recorder problem: ' + WC.error); showLiveWarning('Recorder problem: ' + WC.error); }
+        const out = performance.now() - WC.lastVideoOutAt;
+        if (out > 4000 && !LIVE.wcStallShown) { LIVE.wcStallShown = true; logLiveEvent(`encoder gave no video for ${(out / 1000).toFixed(1)}s`); }
+      }
+    }, 700);
+    LIVE.wcErrShown = false;
+    LIVE.wcStallShown = false;
+    logLiveEvent(usedWc ? 'recording started (' + LIVE.wcMime + ')' : 'recording started (Safari recorder)');
+  } finally {
+    LIVE.starting = false;
+  }
 }
 
-function stopLiveRecording() {
+async function stopLiveRecording() {
+  if (LIVE.wc && WC.on && LIVE.recording) {
+    LIVE.finalElapsed = liveElapsedSec();
+    LIVE.recording = false;
+    if (LIVE.timer) { clearInterval(LIVE.timer); LIVE.timer = null; }
+    setLiveControls('processing');
+    const res = await wcFinish();
+    logLiveEvent('stopped: ' + res.stats);
+    if (!res.blob) { alert('Could not finish the recording. Please record again.'); stopLiveCamera(); enterRecordScreen(); return; }
+    await finishLiveRecording(res.blob, 'new recorder (own MP4 writer)');
+    return;
+  }
   if (!LIVE.recorder || LIVE.recorder.state === 'inactive') return;
   LIVE.finalElapsed = liveElapsedSec();
   LIVE.recording = false;
@@ -352,10 +360,14 @@ function stopLiveRecording() {
 }
 
 async function onLiveRecorderStopped() {
-  releaseLiveWakeLock();
   const mime = (LIVE.recorder && LIVE.recorder.mimeType) || 'video/mp4';
   const raw = new Blob(LIVE.chunks, { type: mime });
   LIVE.chunks = [];
+  await finishLiveRecording(raw, mime);
+}
+
+async function finishLiveRecording(raw, mime) {
+  releaseLiveWakeLock();
   stopLiveCamera();
 
   // Safari's own file is the one thing that plays correctly, so it is kept exactly as recorded.
@@ -538,16 +550,6 @@ function hideLiveHint() {
   if (h) h.style.display = 'none';
 }
 
-// The recording canvas is shown with object-fit: cover, so map a tap onto the canvas picture.
-function liveCanvasRect() {
-  const cv = LIVE.canvas;
-  const r = cv.getBoundingClientRect();
-  const scale = Math.max(r.width / cv.width, r.height / cv.height);
-  const w = cv.width * scale;
-  const h = cv.height * scale;
-  return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, width: w, height: h };
-}
-
 // Map a tap on the screen onto the full camera picture, including any part that is cropped off
 // screen in Wide / Fill mode.
 function liveContentRect(video) {
@@ -555,9 +557,7 @@ function liveContentRect(video) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) return r;
-  const sc = liveScales(video);
-  const mode = LIVE.fitMode || 'wide';
-  const scale = sc[mode === 'fit' ? 'contain' : mode === 'fill' ? 'cover' : 'wide'];
+  const scale = liveScales(video).contain;
   const w = vw * scale;
   const h = vh * scale;
   const cx = r.left + r.width / 2;
@@ -570,17 +570,9 @@ function liveCameraScreenRect() {
   const wrap = document.querySelector('.live-video-wrap');
   if (!wrap) return null;
   const wr = wrap.getBoundingClientRect();
-  let r;
-  if (LIVE.canvasMode && LIVE.canvas && LIVE.drawRect) {
-    const cr = liveCanvasRect();
-    const k = cr.width / LIVE.canvas.width;
-    const d = LIVE.drawRect;
-    r = { left: cr.left + d.x * k, top: cr.top + d.y * k, width: d.w * k, height: d.h * k };
-  } else {
-    const video = $('#live-video');
-    if (!video || !video.videoWidth) return null;
-    r = liveContentRect(video);
-  }
+  const video = $('#live-video');
+  if (!video || !video.videoWidth) return null;
+  const r = liveContentRect(video);
   // only the part that is actually visible on screen
   const left = Math.max(r.left, wr.left);
   const top = Math.max(r.top, wr.top);
@@ -614,9 +606,9 @@ function onLiveTapOverlay(e) {
   if (!LIVE.recording) return;
   const nowMs = performance.now();
   if (LIVE.lastMarkAt && nowMs - LIVE.lastMarkAt < 700) return;
-  const video = LIVE.canvasMode && LIVE.canvas ? LIVE.canvas : $('#live-video');
+  const video = $('#live-video');
   const overlay = $('#live-tap-overlay');
-  const rect = LIVE.canvasMode && LIVE.canvas ? liveCanvasRect() : liveContentRect(video);
+  const rect = liveContentRect(video);
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
   // Taps on the black bars (outside the camera picture) do nothing.

@@ -1697,11 +1697,21 @@ function renderDriverRowView(row, d) {
   });
 }
 
-function randomDriverPassword() {
-  const letters = 'abcdefghjkmnpqrstuvwxyz';
-  let w = '';
-  for (let i = 0; i < 5; i++) w += letters[Math.floor(Math.random() * letters.length)];
-  return w + String(Math.floor(1000 + Math.random() * 9000));
+// Checks (with a throw-away connection that does not touch the manager's own session) that the
+// driver can really sign in with this login + password.
+async function verifyDriverLogin(email, password) {
+  try {
+    const cfg = window.SUPABASE_CONFIG;
+    const c = window.supabase.createClient(cfg.url, cfg.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { error } = await c.auth.signInWithPassword({ email, password });
+    if (error) return { ok: false, message: error.message };
+    try { await c.auth.signOut(); } catch (e) { /* ignore */ }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e && e.message ? e.message : 'could not check' };
+  }
 }
 
 function renderDriverRowEdit(row, d) {
@@ -1712,51 +1722,74 @@ function renderDriverRowEdit(row, d) {
       <label class="driver-edit-label">Driver name</label>
       <input class="field field-inline driver-edit-name" value="${escapeHtml(d.name)}" placeholder="Driver name" />
       <label class="driver-edit-label">Login (what the driver types to sign in)</label>
-      <input class="field field-inline driver-edit-email" type="text" autocapitalize="none" autocorrect="off" value="${escapeHtml(d.email)}" placeholder="name@gmail.com" />
-      <label class="driver-edit-label">New password (leave empty to keep the current one)</label>
-      <div class="driver-edit-pwrow">
-        <input class="field field-inline driver-edit-pass" type="text" autocapitalize="none" autocorrect="off" placeholder="New password" />
-        <button class="btn btn-secondary driver-edit-gen" type="button">Make one</button>
-      </div>
+      <input class="field field-inline driver-edit-email" type="text" name="drv-login" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" value="${escapeHtml(d.email)}" placeholder="name@gmail.com" />
+      <label class="driver-edit-label">New password: exactly what you type here becomes the password (leave empty to keep the current one)</label>
+      <input class="field field-inline driver-edit-pass" type="text" name="drv-newpass" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type the new password" />
       <label class="driver-edit-label">Assigned truck/trailer (optional)</label>
       <input class="field field-inline driver-edit-unit" value="${escapeHtml(d.assigned_unit || '')}" placeholder="Assigned truck/trailer (optional)" />
+      <div class="driver-edit-msg" style="display:none;"></div>
       <div class="driver-edit-actions">
         <button class="btn btn-secondary driver-edit-cancel" type="button">Cancel</button>
         <button class="btn btn-primary driver-edit-save" type="button">Save</button>
       </div>
     </div>
   `;
-  row.querySelector('.driver-edit-gen').addEventListener('click', () => {
-    row.querySelector('.driver-edit-pass').value = randomDriverPassword();
-  });
+  const msgEl = row.querySelector('.driver-edit-msg');
+  const showMsg = (text, kind) => {
+    msgEl.textContent = text;
+    msgEl.className = 'driver-edit-msg ' + (kind || '');
+    msgEl.style.display = text ? 'block' : 'none';
+  };
   row.querySelector('.driver-edit-cancel').addEventListener('click', () => renderDriverRowView(row, d));
-  row.querySelector('.driver-edit-save').addEventListener('click', async () => {
+  const saveBtn = row.querySelector('.driver-edit-save');
+  saveBtn.addEventListener('click', async () => {
     const newName = row.querySelector('.driver-edit-name').value.trim();
     let newEmail = row.querySelector('.driver-edit-email').value.trim().toLowerCase();
-    const newPass = row.querySelector('.driver-edit-pass').value.trim();
+    const newPass = row.querySelector('.driver-edit-pass').value;   // used exactly as typed
     const newUnit = row.querySelector('.driver-edit-unit').value.trim();
-    if (!newName) { alert('Name cannot be empty.'); return; }
+    if (!newName) { showMsg('Name cannot be empty.', 'error'); return; }
     if (!newEmail) newEmail = String(d.email || '').toLowerCase();
     if (!newEmail.includes('@')) newEmail += '@gmail.com';
-    if (newPass && newPass.length < 6) { alert('The password needs at least 6 characters.'); return; }
+    if (newPass && newPass.length < 6) { showMsg('The password needs at least 6 characters.', 'error'); return; }
     const loginChanged = newEmail !== String(d.email || '').toLowerCase();
-    if (newPass && !confirm(`Set a new password for ${newName}? They will be signed out and must use the new one.`)) return;
-    const saveBtn = row.querySelector('.driver-edit-save');
     saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    showMsg('', '');
     try {
       await sbManagerUpdateDriver(d.id, { name: newName, email: newEmail, password: newPass, unit: newUnit });
-      if (newPass || loginChanged) {
-        alert(`Saved. Tell ${newName}:\n\nLogin: ${newEmail}\n${newPass ? 'Password: ' + newPass : 'Password: unchanged'}\n\nWrite the password down now. It is stored scrambled, so it cannot be looked up later (just set a new one if it gets lost).`);
-      }
-      renderDriversList();
     } catch (err) {
       console.error('Update driver failed', err);
       const msg = err && err.message ? err.message : 'try again';
-      alert(/manager_update_driver|schema cache|does not exist/i.test(msg)
-        ? 'The database part of this feature is not installed yet. Ask for the one-time setup step.'
-        : 'Could not save: ' + msg);
+      showMsg(/manager_update_driver|schema cache|does not exist/i.test(msg)
+        ? 'The database part of this feature is not installed yet.'
+        : 'Could not save: ' + msg, 'error');
       saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+      return;
     }
+    if (!newPass && !loginChanged) { renderDriversList(); return; }
+    // Saved. Prove it works, then show the driver's details on screen.
+    let verifyHtml = '';
+    if (newPass) {
+      saveBtn.textContent = 'Checking…';
+      const v = await verifyDriverLogin(newEmail, newPass);
+      verifyHtml = v.ok
+        ? '<div class="driver-done-ok">✔ Checked: this login and password work.</div>'
+        : `<div class="driver-done-bad">Saved, but the check could not log in (${escapeHtml(v.message)}). Try Edit again.</div>`;
+    }
+    row.innerHTML = `
+      <div class="driver-avatar">${escapeHtml(newName.charAt(0).toUpperCase())}</div>
+      <div class="driver-row-info driver-edit-form">
+        <div class="driver-done-title">Saved for ${escapeHtml(newName)}</div>
+        <div class="driver-done-box">
+          <div>Login: <strong>${escapeHtml(newEmail)}</strong></div>
+          <div>Password: <strong>${newPass ? escapeHtml(newPass) : '(unchanged)'}</strong></div>
+        </div>
+        ${verifyHtml}
+        <div class="driver-done-note">Tell the driver now. The password can't be looked up later, but you can always set a new one.</div>
+        <div class="driver-edit-actions"><button class="btn btn-primary driver-done-btn" type="button">Done</button></div>
+      </div>`;
+    row.querySelector('.driver-done-btn').addEventListener('click', () => renderDriversList());
   });
 }
 

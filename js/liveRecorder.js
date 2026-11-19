@@ -24,12 +24,16 @@ function wantWcMode() {
 //   'uw'   = ultra-wide 0.5x lens, full-screen vertical (sees the most)
 //   'full' = normal 1x lens, full-screen vertical (like the Camera app)
 //   'wide' = 4:3 picture with black bars top and bottom
-const LIVE_VIEWS = ['wide', 'full'];
-const LIVE_VIEW_LABELS = { wide: 'Wide', full: 'Full' };
+const LIVE_VIEWS = ['normal', 'wide', 'full'];
+const LIVE_VIEW_LABELS = { normal: 'Normal', wide: 'Wide', full: 'Full' };
 function liveView() {
-  // 'wide' (default) = the camera's whole 4:3 picture, nothing zoomed in.
-  // 'full' = tall picture that fills the whole screen (zoomed in more).
-  try { return localStorage.getItem('pti_live_view2') === 'full' ? 'full' : 'wide'; } catch (e) { return 'wide'; }
+  // 'normal' (default) = asks the camera exactly like the QR-scan page does, shows the whole picture.
+  // 'wide'   = the camera's whole 4:3 picture, nothing zoomed in.
+  // 'full'   = tall picture that fills the whole screen (zoomed in more).
+  try {
+    const v = localStorage.getItem('pti_live_view3');
+    return LIVE_VIEWS.includes(v) ? v : 'normal';
+  } catch (e) { return 'normal'; }
 }
 
 function logLiveEvent(text) {
@@ -58,7 +62,7 @@ function liveScales(video) {
 // Full view fills the whole screen with the camera (only a sliver at the edges is trimmed on screen;
 // the recording keeps the whole picture). Wide view shows the whole 4:3 picture.
 function applyLiveFit() {
-  const full = (LIVE.view || liveView()) !== 'wide';
+  const full = (LIVE.view || liveView()) === 'full';
   LIVE.fitMode = full ? 'cover' : 'fit';
   const v = document.getElementById('live-video');
   if (v) { v.style.transform = ''; v.style.objectFit = full ? 'cover' : 'contain'; }
@@ -74,8 +78,9 @@ function reapplyLiveFit() {
 // Switch between the wide view and the full-screen view (restarts the camera).
 async function toggleLiveFit() {
   if (LIVE.recording) return;
-  const next = (LIVE.view || liveView()) === 'wide' ? 'full' : 'wide';
-  try { localStorage.setItem('pti_live_view2', next); } catch (e) { /* storage unavailable */ }
+  const cur = LIVE.view || liveView();
+  const next = LIVE_VIEWS[(LIVE_VIEWS.indexOf(cur) + 1) % LIVE_VIEWS.length];
+  try { localStorage.setItem('pti_live_view3', next); } catch (e) { /* storage unavailable */ }
   const ok = await startLiveCamera();
   if (!ok) showLiveWarning('Could not switch the camera view.');
 }
@@ -111,6 +116,32 @@ async function switchToUltraWideIfWanted(view, videoBase) {
   }
 }
 
+// The QR page's picture is what Safari gives by default (often only 720p). Ask for more pixels of the
+// SAME picture (same shape, so the same field of view); if the shape changes at all, go back.
+async function upgradeNormalViewQuality() {
+  try {
+    const track = LIVE.stream.getVideoTracks()[0];
+    const s0 = track.getSettings();
+    const w0 = s0.width || 0;
+    const h0 = s0.height || 0;
+    if (!w0 || !h0 || Math.min(w0, h0) >= 1080) return;
+    const k = 1080 / Math.min(w0, h0);
+    await track.applyConstraints({
+      width: { ideal: Math.round(w0 * k) },
+      height: { ideal: Math.round(h0 * k) },
+      aspectRatio: { ideal: w0 / h0 },
+    });
+    const s1 = track.getSettings();
+    const same = s1.width && s1.height && Math.abs(s1.width / s1.height - w0 / h0) < 0.02;
+    logLiveEvent(`normal view: ${w0}x${h0} -> ${s1.width}x${s1.height}${same ? '' : ' (shape changed, reverting)'}`);
+    if (!same) {
+      await track.applyConstraints({ width: { ideal: w0 }, height: { ideal: h0 }, aspectRatio: { ideal: w0 / h0 } });
+    }
+  } catch (e) {
+    logLiveEvent('normal view upgrade skipped: ' + (e && e.message));
+  }
+}
+
 async function startLiveCamera() {
   stopLiveCamera();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !pickLiveMime()) return false;
@@ -129,7 +160,15 @@ async function startLiveCamera() {
     frameRate: { ideal: 30 },
   };
   try {
-    if (wide && upright) {
+    if (view === 'normal') {
+      // Exactly what the QR-scan page asks for: just the back camera, Safari picks the picture.
+      LIVE.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: true,
+      });
+      await upgradeNormalViewQuality();
+    }
+    if (!LIVE.stream && wide && upright) {
       try {
         LIVE.stream = await navigator.mediaDevices.getUserMedia({
           video: Object.assign({ facingMode: { ideal: 'environment' } }, videoBase, { aspectRatio: { exact: 3 / 4 } }),

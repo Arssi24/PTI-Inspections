@@ -457,6 +457,10 @@ async function onSignup() {
     showAuthError(errEl, 'Fill in your name, email, and password.');
     return;
   }
+  if (phone.replace(/\D/g, '').length < 10) {
+    showAuthError(errEl, 'Enter your phone number (at least 10 digits).');
+    return;
+  }
   if (password.length < 6) {
     showAuthError(errEl, 'Password must be at least 6 characters.');
     return;
@@ -1857,7 +1861,7 @@ function inRange(ts, range) {
 
 // Inspections (video + defect photos) older than this are deleted automatically the first
 // time a manager opens the dashboard each day. Same delete path as the manual Delete button.
-const RETENTION_DAYS = 60;
+const RETENTION_DAYS = 14;
 const PURGE_BATCH_LIMIT = 40;
 
 async function purgeExpiredInspections(all) {

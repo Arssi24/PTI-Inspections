@@ -24,16 +24,17 @@ function wantWcMode() {
 //   'uw'   = ultra-wide 0.5x lens, full-screen vertical (sees the most)
 //   'full' = normal 1x lens, full-screen vertical (like the Camera app)
 //   'wide' = 4:3 picture with black bars top and bottom
-const LIVE_VIEWS = ['normal', 'wide', 'full'];
-const LIVE_VIEW_LABELS = { normal: 'Normal', wide: 'Wide', full: 'Full' };
+const LIVE_VIEWS = ['classic', 'wide', 'full'];
+const LIVE_VIEW_LABELS = { classic: 'Classic', wide: 'Wide', full: 'Full' };
 function liveView() {
-  // 'normal' (default) = asks the camera exactly like the QR-scan page does, shows the whole picture.
+  // 'classic' (default) = the camera exactly as in the very first live version: asks for plain 1920x1080,
+  //            shows the whole picture (everything fits, nothing cropped).
   // 'wide'   = the camera's whole 4:3 picture, nothing zoomed in.
   // 'full'   = tall picture that fills the whole screen (zoomed in more).
   try {
-    const v = localStorage.getItem('pti_live_view3');
-    return LIVE_VIEWS.includes(v) ? v : 'normal';
-  } catch (e) { return 'normal'; }
+    const v = localStorage.getItem('pti_live_view4');
+    return LIVE_VIEWS.includes(v) ? v : 'classic';
+  } catch (e) { return 'classic'; }
 }
 
 function logLiveEvent(text) {
@@ -80,7 +81,7 @@ async function toggleLiveFit() {
   if (LIVE.recording) return;
   const cur = LIVE.view || liveView();
   const next = LIVE_VIEWS[(LIVE_VIEWS.indexOf(cur) + 1) % LIVE_VIEWS.length];
-  try { localStorage.setItem('pti_live_view3', next); } catch (e) { /* storage unavailable */ }
+  try { localStorage.setItem('pti_live_view4', next); } catch (e) { /* storage unavailable */ }
   const ok = await startLiveCamera();
   if (!ok) showLiveWarning('Could not switch the camera view.');
 }
@@ -116,32 +117,6 @@ async function switchToUltraWideIfWanted(view, videoBase) {
   }
 }
 
-// The QR page's picture is what Safari gives by default (often only 720p). Ask for more pixels of the
-// SAME picture (same shape, so the same field of view); if the shape changes at all, go back.
-async function upgradeNormalViewQuality() {
-  try {
-    const track = LIVE.stream.getVideoTracks()[0];
-    const s0 = track.getSettings();
-    const w0 = s0.width || 0;
-    const h0 = s0.height || 0;
-    if (!w0 || !h0 || Math.min(w0, h0) >= 1080) return;
-    const k = 1080 / Math.min(w0, h0);
-    await track.applyConstraints({
-      width: { ideal: Math.round(w0 * k) },
-      height: { ideal: Math.round(h0 * k) },
-      aspectRatio: { ideal: w0 / h0 },
-    });
-    const s1 = track.getSettings();
-    const same = s1.width && s1.height && Math.abs(s1.width / s1.height - w0 / h0) < 0.02;
-    logLiveEvent(`normal view: ${w0}x${h0} -> ${s1.width}x${s1.height}${same ? '' : ' (shape changed, reverting)'}`);
-    if (!same) {
-      await track.applyConstraints({ width: { ideal: w0 }, height: { ideal: h0 }, aspectRatio: { ideal: w0 / h0 } });
-    }
-  } catch (e) {
-    logLiveEvent('normal view upgrade skipped: ' + (e && e.message));
-  }
-}
-
 async function startLiveCamera() {
   stopLiveCamera();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !pickLiveMime()) return false;
@@ -160,13 +135,12 @@ async function startLiveCamera() {
     frameRate: { ideal: 30 },
   };
   try {
-    if (view === 'normal') {
-      // Exactly what the QR-scan page asks for: just the back camera, Safari picks the picture.
+    if (view === 'classic') {
+      // Exactly the request the very first live camera used.
       LIVE.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
         audio: true,
       });
-      await upgradeNormalViewQuality();
     }
     if (!LIVE.stream && wide && upright) {
       try {

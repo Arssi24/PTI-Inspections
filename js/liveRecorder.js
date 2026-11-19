@@ -31,10 +31,9 @@ function liveView() {
   //            shows the whole picture (everything fits, nothing cropped).
   // 'wide'   = the camera's whole 4:3 picture, nothing zoomed in.
   // 'full'   = tall picture that fills the whole screen (zoomed in more).
-  try {
-    const v = localStorage.getItem('pti_live_view4');
-    return LIVE_VIEWS.includes(v) ? v : 'classic';
-  } catch (e) { return 'classic'; }
+  // Locked: always the 'wide' picture (the whole 3:4 camera picture with black bars, so the most fits in).
+  // The Classic/Wide/Full switch button was removed so the view can never flip between runs.
+  return 'wide';
 }
 
 function logLiveEvent(text) {
@@ -78,6 +77,7 @@ function reapplyLiveFit() {
 
 // Switch between the wide view and the full-screen view (restarts the camera).
 async function toggleLiveFit() {
+  return; // view is locked to 'wide' (see liveView)
   if (LIVE.recording) return;
   const cur = LIVE.view || liveView();
   const next = LIVE_VIEWS[(LIVE_VIEWS.indexOf(cur) + 1) % LIVE_VIEWS.length];

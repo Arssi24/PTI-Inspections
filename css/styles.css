@@ -653,3 +653,6 @@ body::before {
 .people-bar .people-bar-chev { width: 20px; height: 20px; transition: transform .18s ease; }
 .people-bar.open .people-bar-chev { transform: rotate(180deg); }
 .people-body { margin: 0 0 14px; }
+
+/* the camera view is locked to Wide: no switch button */
+#btn-live-fit { display: none !important; }

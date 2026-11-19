@@ -314,6 +314,7 @@ async function init() {
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
   $('#drivers-search').addEventListener('input', applyDriversSearch);
+  setupManagerCodeChip();
   [['#bar-managers', '#managers-body'], ['#bar-drivers', '#drivers-body']].forEach(([barSel, bodySel]) => {
     $(barSel).addEventListener('click', () => {
       const bar = $(barSel);
@@ -480,6 +481,7 @@ async function onSignup() {
   }
 
   let fleetCode = null;
+  let managerCode = '';
   if (role === 'driver') {
     const entered = $('#signup-fleet-code').value.trim();
     if (!entered) {
@@ -517,6 +519,22 @@ async function onSignup() {
       return;
     }
     fleetCode = fleet.code;
+    managerCode = $('#signup-manager-security-code').value.trim();
+    if (!managerCode) {
+      showAuthError(errEl, 'Enter the manager security code. Another manager can show it to you on their dashboard.');
+      return;
+    }
+    let codeOk = false;
+    try {
+      codeOk = await sbCheckManagerCode(fleetCode, managerCode);
+    } catch (err) {
+      showAuthError(errEl, 'Could not check the security code (the database update may not be installed yet).');
+      return;
+    }
+    if (!codeOk) {
+      showAuthError(errEl, 'Wrong manager security code. Ask a manager on your team to check it on their dashboard.');
+      return;
+    }
   }
 
   const btn = $('#btn-signup');
@@ -526,7 +544,7 @@ async function onSignup() {
     // DB trigger — see supabase/schema.sql — from this metadata. That's what lets signup
     // work correctly whether or not "Confirm email" is turned on: the trigger runs inside
     // the same transaction as the auth.users insert, before any client session exists.
-    const { data, error } = await sbSignUp(email, password, { name, phone, role, fleet_code: fleetCode }, currentSiteUrl());
+    const { data, error } = await sbSignUp(email, password, { name, phone, role, fleet_code: fleetCode, manager_code: managerCode }, currentSiteUrl());
     if (error) {
       showAuthError(errEl, error.message);
       return;
@@ -1602,6 +1620,51 @@ async function renderUnitsList() {
       renderUnitsList();
     });
     list.appendChild(row);
+  });
+}
+
+// Manager security code on the dashboard: tap Show to reveal it, "New code" (tap twice) changes it.
+function setupManagerCodeChip() {
+  const valEl = $('#mgr-code-value');
+  const showBtn = $('#btn-mgr-code-show');
+  const newBtn = $('#btn-mgr-code-new');
+  if (!valEl || !showBtn || !newBtn) return;
+  let shown = false;
+  let confirmTimer = null;
+  const MASK = '••••••••';
+  const hide = () => { shown = false; valEl.textContent = MASK; showBtn.textContent = 'Show'; };
+  const resetNew = () => { clearTimeout(confirmTimer); newBtn.textContent = 'New code'; newBtn.dataset.armed = ''; };
+  showBtn.addEventListener('click', async () => {
+    if (shown) { hide(); return; }
+    showBtn.disabled = true;
+    try {
+      valEl.textContent = (await sbGetManagerCode()) || '—';
+      shown = true;
+      showBtn.textContent = 'Hide';
+    } catch (err) {
+      console.error('Could not read manager code', err);
+      valEl.textContent = 'not set up yet';
+    }
+    showBtn.disabled = false;
+  });
+  newBtn.addEventListener('click', async () => {
+    if (!newBtn.dataset.armed) {
+      newBtn.dataset.armed = '1';
+      newBtn.textContent = 'Tap again to confirm';
+      confirmTimer = setTimeout(resetNew, 4000);
+      return;
+    }
+    resetNew();
+    newBtn.disabled = true;
+    try {
+      valEl.textContent = await sbRegenerateManagerCode();
+      shown = true;
+      showBtn.textContent = 'Hide';
+    } catch (err) {
+      console.error('Could not change manager code', err);
+      valEl.textContent = 'could not change it';
+    }
+    newBtn.disabled = false;
   });
 }
 

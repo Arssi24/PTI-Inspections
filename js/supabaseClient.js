@@ -97,6 +97,23 @@ async function sbGetFleetManagers(fleetCode) {
   return data;
 }
 
+// Manager security code (see supabase/manager_security_code.sql)
+async function sbCheckManagerCode(fleetCode, managerCode) {
+  const { data, error } = await requireSb().rpc('check_manager_code', { p_fleet: fleetCode, p_code: managerCode });
+  if (error) throw error;
+  return data === true;
+}
+async function sbGetManagerCode() {
+  const { data, error } = await requireSb().rpc('get_manager_code');
+  if (error) throw error;
+  return data;
+}
+async function sbRegenerateManagerCode() {
+  const { data, error } = await requireSb().rpc('regenerate_manager_code');
+  if (error) throw error;
+  return data;
+}
+
 async function sbRemoveDriver(userId) {
   return requireSb().from('profiles').delete().eq('id', userId);
 }

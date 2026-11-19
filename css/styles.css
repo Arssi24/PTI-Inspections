@@ -663,3 +663,6 @@ body::before {
   box-shadow: 0 6px 16px rgba(42,47,80,0.14); margin: 0 auto 14px;
 }
 .brand-logo { display: block; width: 210px; max-width: 62vw; height: auto; }
+
+/* technical recording details are hidden from users (the red "video cut short" warning stays) */
+#rec-diag, #video-info, #live-cam-info { display: none !important; }

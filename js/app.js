@@ -36,6 +36,7 @@ const state = {
   dashDriver: '',
   dashType: '',
   dashUnit: '',
+  dashSearch: '',
   dashKnownDrivers: [],
   dashKnownUnits: [],
 };
@@ -147,7 +148,7 @@ function initCustomVideoPlayer(video) {
       ticks.appendChild(tick);
     });
   }
-  video.cvpSetMarks = (times) => { markTimes = times || []; drawTicks(); };
+  video.cvpSetMarks = () => { /* time flags are no longer shown - only the photos matter */ };
   video.addEventListener('durationchange', drawTicks);
   video.addEventListener('loadedmetadata', drawTicks);
 
@@ -312,6 +313,13 @@ async function init() {
   $('#btn-live-close').addEventListener('click', () => $('#btn-record-close').click());
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
+  $('#drivers-search').addEventListener('input', applyDriversSearch);
+  let dashSearchTimer = null;
+  $('#dash-search').addEventListener('input', () => {
+    clearTimeout(dashSearchTimer);
+    dashSearchTimer = setTimeout(() => { state.dashSearch = $('#dash-search').value; renderDashboard(); }, 300);
+  });
+  $('#btn-live-fit').addEventListener('click', toggleLiveFit);
   $('#live-tap-overlay').addEventListener('click', onLiveTapOverlay);
   $('#btn-retry-live').addEventListener('click', enterRecordScreen);
   $('#btn-live-fallback').addEventListener('click', () => {
@@ -731,6 +739,8 @@ async function loginAs(profile) {
     state.dashDriver = '';
     state.dashUnit = '';
     state.dashType = '';
+    state.dashSearch = '';
+    $('#dash-search').value = '';
     $('#filter-driver-input').value = '';
     $('#filter-unit-input').value = '';
     $('#filter-type').value = '';
@@ -1625,9 +1635,38 @@ async function renderDriversList() {
   drivers.forEach((d) => {
     const row = document.createElement('div');
     row.className = 'entry-card driver-row';
+    row.dataset.search = [d.name, d.email, d.assigned_unit].filter(Boolean).join(' ').toLowerCase();
     renderDriverRowView(row, d);
     list.appendChild(row);
   });
+  applyDriversSearch();
+}
+
+// Hides driver rows that don't match what is typed in the search bar (name, login or assigned truck/trailer).
+function applyDriversSearch() {
+  const input = $('#drivers-search');
+  const list = $('#drivers-list');
+  if (!input || !list) return;
+  const q = input.value.trim().toLowerCase();
+  const words = q ? q.split(/\s+/) : [];
+  let shown = 0;
+  list.querySelectorAll('.driver-row').forEach((row) => {
+    const hay = row.dataset.search || '';
+    const match = words.every((w) => hay.includes(w));
+    row.style.display = match ? '' : 'none';
+    if (match) shown += 1;
+  });
+  let none = list.querySelector('.drivers-no-match');
+  if (words.length && shown === 0) {
+    if (!none) {
+      none = document.createElement('div');
+      none.className = 'empty-state drivers-no-match';
+      list.appendChild(none);
+    }
+    none.textContent = 'No driver or truck matches "' + input.value.trim() + '".';
+  } else if (none) {
+    none.remove();
+  }
 }
 
 // A driver who hasn't uploaded a PTI by this hour (manager's local time) turns from yellow to red.
@@ -1852,6 +1891,14 @@ async function purgeExpiredInspections(all) {
   }
 }
 
+// Search bar on the Inspections tab: every typed word must appear in the driver's name, login, or the truck/trailer.
+function matchesDashSearch(r) {
+  const q = (state.dashSearch || '').trim().toLowerCase();
+  if (!q) return true;
+  const hay = [r.driver_name, r.driver_email, r.unit].filter(Boolean).join(' ').toLowerCase();
+  return q.split(/\s+/).every((w) => hay.includes(w));
+}
+
 async function renderDashboard() {
   revokeActiveVideoObjectUrls();
   const list = $('#dash-list');
@@ -1872,6 +1919,7 @@ async function renderDashboard() {
     (!state.dashDriver || r.driver_name === state.dashDriver) &&
     (!state.dashType || r.type === state.dashType) &&
     (!state.dashUnit || r.unit === state.dashUnit) &&
+    matchesDashSearch(r) &&
     (!state.dashOnlyDefects || (r.defects && r.defects.length > 0))
   );
 
@@ -1880,6 +1928,7 @@ async function renderDashboard() {
     (!state.dashDriver || r.driver_name === state.dashDriver) &&
     (!state.dashType || r.type === state.dashType) &&
     (!state.dashUnit || r.unit === state.dashUnit) &&
+    matchesDashSearch(r) &&
     r.defects && r.defects.length > 0
   ).length;
   $('#dash-stats').innerHTML = `
@@ -1900,6 +1949,8 @@ async function renderDashboard() {
     state.dashRange = 'all';
     state.dashDriver = '';
     state.dashUnit = '';
+    state.dashSearch = '';
+    $('#dash-search').value = '';
     state.dashType = '';
     state.dashOnlyDefects = false;
     $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));

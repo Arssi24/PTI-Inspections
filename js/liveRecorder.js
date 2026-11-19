@@ -24,10 +24,12 @@ function wantWcMode() {
 //   'uw'   = ultra-wide 0.5x lens, full-screen vertical (sees the most)
 //   'full' = normal 1x lens, full-screen vertical (like the Camera app)
 //   'wide' = 4:3 picture with black bars top and bottom
-const LIVE_VIEWS = ['uw', 'full', 'wide'];
-const LIVE_VIEW_LABELS = { uw: '0.5×', full: '1×', wide: '4:3' };
+const LIVE_VIEWS = ['wide', 'full'];
+const LIVE_VIEW_LABELS = { wide: 'Wide', full: 'Full' };
 function liveView() {
-  return 'full'; // the 0.5x / 4:3 buttons were removed: always the normal lens, full screen
+  // 'wide' (default) = the camera's whole 4:3 picture, nothing zoomed in.
+  // 'full' = tall picture that fills the whole screen (zoomed in more).
+  try { return localStorage.getItem('pti_live_view2') === 'full' ? 'full' : 'wide'; } catch (e) { return 'wide'; }
 }
 
 function logLiveEvent(text) {
@@ -69,13 +71,11 @@ function reapplyLiveFit() {
   if (LIVE.stream) applyLiveFit();
 }
 
-// Cycle 0.5x -> 1x -> 4:3 (restarts the camera). Skips 0.5x on phones that have no ultra-wide lens.
+// Switch between the wide view and the full-screen view (restarts the camera).
 async function toggleLiveFit() {
   if (LIVE.recording) return;
-  const cur = LIVE.view || liveView();
-  let next = LIVE_VIEWS[(LIVE_VIEWS.indexOf(cur) + 1) % LIVE_VIEWS.length];
-  if (next === 'uw' && LIVE.uwAvailable === false) next = 'full';
-  try { localStorage.setItem('pti_live_view', next); } catch (e) { /* storage unavailable */ }
+  const next = (LIVE.view || liveView()) === 'wide' ? 'full' : 'wide';
+  try { localStorage.setItem('pti_live_view2', next); } catch (e) { /* storage unavailable */ }
   const ok = await startLiveCamera();
   if (!ok) showLiveWarning('Could not switch the camera view.');
 }
@@ -129,10 +129,20 @@ async function startLiveCamera() {
     frameRate: { ideal: 30 },
   };
   try {
-    LIVE.stream = await navigator.mediaDevices.getUserMedia({
-      video: Object.assign({ facingMode: { ideal: 'environment' } }, videoBase),
-      audio: true,
-    });
+    if (wide && upright) {
+      try {
+        LIVE.stream = await navigator.mediaDevices.getUserMedia({
+          video: Object.assign({ facingMode: { ideal: 'environment' } }, videoBase, { aspectRatio: { exact: 3 / 4 } }),
+          audio: true,
+        });
+      } catch (e) { LIVE.stream = null; }
+    }
+    if (!LIVE.stream) {
+      LIVE.stream = await navigator.mediaDevices.getUserMedia({
+        video: Object.assign({ facingMode: { ideal: 'environment' } }, videoBase),
+        audio: true,
+      });
+    }
     await switchToUltraWideIfWanted(view, videoBase);
   } catch (err) {
     console.warn('Live camera unavailable:', err);

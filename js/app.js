@@ -314,6 +314,15 @@ async function init() {
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
   $('#drivers-search').addEventListener('input', applyDriversSearch);
+  [['#bar-managers', '#managers-body'], ['#bar-drivers', '#drivers-body']].forEach(([barSel, bodySel]) => {
+    $(barSel).addEventListener('click', () => {
+      const bar = $(barSel);
+      const open = !bar.classList.contains('open');
+      bar.classList.toggle('open', open);
+      bar.setAttribute('aria-expanded', open ? 'true' : 'false');
+      $(bodySel).style.display = open ? 'block' : 'none';
+    });
+  });
   let dashSearchTimer = null;
   $('#dash-search').addEventListener('input', () => {
     clearTimeout(dashSearchTimer);
@@ -1596,7 +1605,39 @@ async function renderUnitsList() {
   });
 }
 
+async function renderManagersList() {
+  const list = $('#managers-list');
+  if (!list) return;
+  let managers = [];
+  try {
+    managers = await sbGetFleetManagers(state.fleetCode);
+  } catch (err) {
+    $('#managers-count').textContent = '–';
+    list.innerHTML = '<div class="empty-state">Could not load fleet managers — try again in a moment.</div>';
+    return;
+  }
+  $('#managers-count').textContent = String(managers.length);
+  list.innerHTML = '';
+  if (managers.length === 0) {
+    list.innerHTML = '<div class="empty-state">No fleet managers found.</div>';
+    return;
+  }
+  managers.forEach((m) => {
+    const row = document.createElement('div');
+    row.className = 'entry-card driver-row';
+    const you = m.id === state.userId;
+    row.innerHTML = `
+      <div class="driver-avatar">${escapeHtml((m.name || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="driver-row-info">
+        <div class="entry-unit">${escapeHtml(m.name)}${you ? '<span class="pti-unit">You</span>' : ''}</div>
+        <div class="entry-meta"><span>${escapeHtml(m.email)}</span>${m.phone ? `<span>${escapeHtml(m.phone)}</span>` : ''}</div>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
 async function renderDriversList() {
+  renderManagersList();
   const list = $('#drivers-list');
   const statsEl = $('#drivers-stats');
   list.innerHTML = '';
@@ -1624,6 +1665,7 @@ async function renderDriversList() {
     const rank = { red: 0, yellow: 1, green: 2 };
     drivers.sort((a, b) => rank[a._pti.level] - rank[b._pti.level] || (a.name || '').localeCompare(b.name || ''));
   }
+  $('#drivers-count').textContent = String(drivers.length);
   statsEl.innerHTML = `
     <div class="stat-card"><div class="stat-num">${drivers.length}</div><div class="stat-label">Active drivers</div></div>
     ${recent ? `

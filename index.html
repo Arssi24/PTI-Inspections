@@ -497,10 +497,26 @@
       <div class="dash-panel" id="panel-drivers">
         <div class="dash-stats" id="drivers-stats"></div>
         <p class="demo-note">Everyone who's signed up with your fleet code. Green = PTI done today, yellow = not yet, red = still missing after 12:00 PM. Missing drivers are listed first.</p>
-        <div class="drivers-search">
-          <input class="field" type="search" id="drivers-search" placeholder="Search driver name or truck/trailer" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <button class="people-bar" id="bar-managers" type="button" aria-expanded="false">
+          <span class="people-bar-title">Fleet managers on record</span>
+          <span class="people-bar-count" id="managers-count">0</span>
+          <svg class="icon people-bar-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="managers-body" class="people-body" style="display:none;">
+          <div id="managers-list" class="entry-list"></div>
         </div>
-        <div id="drivers-list" class="entry-list"></div>
+
+        <button class="people-bar open" id="bar-drivers" type="button" aria-expanded="true">
+          <span class="people-bar-title">Drivers on record</span>
+          <span class="people-bar-count" id="drivers-count">0</span>
+          <svg class="icon people-bar-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="drivers-body" class="people-body">
+          <div class="drivers-search">
+            <input class="field" type="search" id="drivers-search" placeholder="Search driver name or truck/trailer" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+          </div>
+          <div id="drivers-list" class="entry-list"></div>
+        </div>
       </div>
     </div>
   </section>

@@ -86,6 +86,17 @@ async function sbGetFleetDrivers(fleetCode) {
   return data;
 }
 
+async function sbGetFleetManagers(fleetCode) {
+  const { data, error } = await requireSb()
+    .from('profiles')
+    .select('*')
+    .eq('fleet_code', fleetCode)
+    .eq('role', 'manager')
+    .order('name');
+  if (error) throw error;
+  return data;
+}
+
 async function sbRemoveDriver(userId) {
   return requireSb().from('profiles').delete().eq('id', userId);
 }

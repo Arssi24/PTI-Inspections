@@ -637,3 +637,19 @@ body::before {
 
 .drivers-search { margin: 0 0 12px; }
 .drivers-search .field { margin: 0; }
+
+/* Fleet managers / Drivers "on record" bars */
+.people-bar {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--primary-light); color: var(--text, #111); border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px; padding: 13px 14px; margin: 0 0 10px; font: inherit; font-weight: 800; font-size: 15px;
+  cursor: pointer; text-align: left;
+}
+.people-bar .people-bar-title { flex: 1; }
+.people-bar .people-bar-count {
+  background: var(--primary, #1d4ed8); color: #fff; border-radius: 999px;
+  min-width: 26px; padding: 2px 9px; text-align: center; font-size: 13px; font-weight: 800;
+}
+.people-bar .people-bar-chev { width: 20px; height: 20px; transition: transform .18s ease; }
+.people-bar.open .people-bar-chev { transform: rotate(180deg); }
+.people-body { margin: 0 0 14px; }

@@ -193,8 +193,12 @@ async function startLiveCamera() {
   startLiveDrawLoop(v);
   const vtrack = LIVE.stream.getVideoTracks()[0];
   if (vtrack) {
-    vtrack.addEventListener('mute', () => { logLiveEvent('camera track MUTED'); showLiveWarning('The camera stopped sending video. Keep the phone steady and the lens uncovered.'); });
-    vtrack.addEventListener('unmute', () => { logLiveEvent('camera track unmuted'); });
+    vtrack.addEventListener('mute', () => {
+      logLiveEvent('camera track MUTED');
+      // Idle (not recording) just means the phone's own Camera app or another app took the camera for a moment.
+      if (LIVE.recording) showLiveWarning('The camera stopped sending video. Keep the phone steady and the lens uncovered.');
+    });
+    vtrack.addEventListener('unmute', () => { logLiveEvent('camera track unmuted'); if (!LIVE.recording) hideLiveWarning(); });
     vtrack.addEventListener('ended', () => { logLiveEvent('camera track ENDED'); showLiveWarning('The camera stopped. Stop recording and start again.'); });
   }
   document.addEventListener('visibilitychange', onLiveVisibility);
@@ -571,6 +575,14 @@ function hideLiveWarning() {
 function onLiveVisibility() {
   logLiveEvent(`page ${document.visibilityState}`);
   if (document.visibilityState === 'hidden' && LIVE.recording) showLiveWarning('Recording was interrupted when the app left the screen.');
+  // Back from another app (e.g. the phone's Camera app) while NOT recording: restart the camera if it was taken away.
+  if (document.visibilityState === 'visible' && !LIVE.recording && LIVE.stream) {
+    const t = LIVE.stream.getVideoTracks()[0];
+    const screen = document.getElementById('screen-record');
+    if (t && (t.muted || t.readyState === 'ended') && screen && screen.classList.contains('active')) {
+      setTimeout(() => { if (!LIVE.recording) startLiveCamera().then(hideLiveWarning); }, 400);
+    }
+  }
 }
 
 // Safari sometimes keeps recording sound after the picture has stopped. Look at the finished file

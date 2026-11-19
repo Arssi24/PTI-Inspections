@@ -80,17 +80,17 @@
           <div id="manager-mode-field" style="display:none;">
             <label class="field-label">Fleet setup</label>
             <div class="role-toggle">
-              <button class="role-btn manager-mode-btn active" data-mode="create" type="button">Start a new fleet</button>
-              <button class="role-btn manager-mode-btn" data-mode="join" type="button">Join an existing fleet</button>
+              <button class="role-btn manager-mode-btn active" data-mode="join" type="button">Join my fleet</button>
+              <button class="role-btn manager-mode-btn" data-mode="create" type="button">Start a new fleet</button>
             </div>
-            <p class="field-hint" id="manager-create-hint">Pick this if you're the first/only manager setting this up. A brand-new, unique fleet code is generated automatically — give it to your drivers so they link to your dashboard.</p>
-            <div id="manager-join-code-field" style="display:none;">
-              <p class="field-hint">Only pick this if <strong>another manager already ran "Start a new fleet"</strong> and gave you their code — this links your account to their existing dashboard instead of creating a separate one.</p>
-              <label class="field-label">Existing fleet code</label>
-              <input class="field" type="text" id="signup-manager-fleet-code" placeholder="Ask another manager on your team" autocomplete="off" />
+            <p class="field-hint" id="manager-create-hint" style="display:none;">Pick this if you're setting up a brand-new company. A new fleet code and a manager security code are created automatically for you. Give drivers only the fleet code.</p>
+            <div id="manager-join-code-field">
+              <p class="field-hint">Joining an existing fleet takes <strong>both codes</strong>. Drivers only need the fleet code, so never share the manager security code with them.</p>
+              <label class="field-label">Fleet code</label>
+              <input class="field" type="text" id="signup-manager-fleet-code" placeholder="The fleet code (same one drivers use)" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" />
               <label class="field-label">Manager security code</label>
-              <input class="field" type="text" id="signup-manager-security-code" placeholder="Only fleet managers have this code" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" />
-              <p class="field-hint">Drivers don't get this code. Another manager can show it to you on their dashboard.</p>
+              <input class="field" type="text" id="signup-manager-security-code" placeholder="Manager-only security code" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" />
+              <p class="field-hint">Another manager can show you this code on their dashboard.</p>
             </div>
           </div>
 

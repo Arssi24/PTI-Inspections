@@ -10,7 +10,7 @@ const MIN_SECONDS = { PTI: 3.5 * 60, HOOK: 60, DROP: 60 };
 const state = {
   role: 'driver',
   signupRole: 'driver',
-  managerSignupMode: 'create',
+  managerSignupMode: 'join',
   pendingAuthEmail: '',
   silentRetryInFlight: false,
   activeVideoObjectUrls: [],
@@ -504,7 +504,7 @@ async function onSignup() {
   if (role === 'manager' && state.managerSignupMode === 'join') {
     const entered = $('#signup-manager-fleet-code').value.trim();
     if (!entered) {
-      showAuthError(errEl, 'Enter the existing fleet code from another manager on your team.');
+      showAuthError(errEl, 'Enter the fleet code.');
       return;
     }
     let fleet;

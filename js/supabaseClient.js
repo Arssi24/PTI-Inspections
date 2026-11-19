@@ -235,6 +235,133 @@ async function sbUploadBlobWithProgress(path, blob, onProgress) {
   });
 }
 
+// ---- Fast + resumable upload (TUS protocol, Supabase Storage) -------------------------------
+// Sends the file in 6 MB pieces straight to Supabase's storage server. If the connection drops, only
+// the current piece is retried and the upload carries on from where it stopped (even after the app is
+// closed and reopened), instead of starting the whole video again. Falls back to the old single-request
+// upload if the resumable route is not available.
+const TUS_CHUNK = 6 * 1024 * 1024; // Supabase requires exactly 6 MB pieces
+const TUS_KEY_PREFIX = 'pti_tus_';
+
+function tusEndpoint() {
+  const base = String(window.SUPABASE_CONFIG.url || '');
+  const ref = (base.match(/^https:\/\/([a-z0-9]+)\.supabase\.co/i) || [])[1];
+  // The direct storage address skips the general API gateway, which is much faster for big files.
+  return ref ? `https://${ref}.storage.supabase.co/storage/v1/upload/resumable` : `${base}/storage/v1/upload/resumable`;
+}
+
+function tusB64(s) {
+  return btoa(unescape(encodeURIComponent(String(s))));
+}
+
+async function tusToken() {
+  const { data } = await requireSb().auth.getSession();
+  const token = data && data.session ? data.session.access_token : null;
+  if (!token) throw new Error('Your session expired — log back in and try again.');
+  return token;
+}
+
+function tusRequest(method, url, headers, body, onUploadProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    Object.keys(headers || {}).forEach((k) => xhr.setRequestHeader(k, headers[k]));
+    if (onUploadProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onUploadProgress(e.loaded); };
+    xhr.onload = () => resolve({ status: xhr.status, getHeader: (n) => xhr.getResponseHeader(n), text: xhr.responseText });
+    xhr.onerror = () => reject(new Error('network'));
+    xhr.ontimeout = () => reject(new Error('network'));
+    xhr.timeout = 120000;
+    xhr.send(body || null);
+  });
+}
+
+function tusSleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function sbUploadResumable(path, blob, onProgress, resumeId) {
+  const total = blob.size;
+  const keyName = TUS_KEY_PREFIX + (resumeId || path);
+  const endpoint = tusEndpoint();
+  const baseHeaders = async () => ({ Authorization: `Bearer ${await tusToken()}`, apikey: window.SUPABASE_CONFIG.anonKey, 'Tus-Resumable': '1.0.0' });
+
+  // 1) find (or create) the upload
+  let uploadUrl = null;
+  try { uploadUrl = localStorage.getItem(keyName); } catch (e) { /* storage unavailable */ }
+  let offset = 0;
+  if (uploadUrl) {
+    try {
+      const h = await tusRequest('HEAD', uploadUrl, await baseHeaders());
+      if (h.status === 200 && Number(h.getHeader('Upload-Offset')) >= 0) offset = Number(h.getHeader('Upload-Offset'));
+      else uploadUrl = null;
+    } catch (e) { uploadUrl = null; }
+  }
+  if (!uploadUrl) {
+    const meta = [
+      'bucketName ' + tusB64('inspection-media'),
+      'objectName ' + tusB64(path),
+      'contentType ' + tusB64(blob.type || 'application/octet-stream'),
+      'cacheControl ' + tusB64('3600'),
+    ].join(',');
+    const c = await tusRequest('POST', endpoint, Object.assign(await baseHeaders(), {
+      'Upload-Length': String(total), 'Upload-Metadata': meta, 'x-upsert': 'true',
+    }));
+    if (c.status !== 201 || !c.getHeader('Location')) throw new Error(`resumable-start-failed (${c.status}) ${String(c.text || '').slice(0, 160)}`);
+    uploadUrl = new URL(c.getHeader('Location'), endpoint).toString();
+    try { localStorage.setItem(keyName, uploadUrl); } catch (e) { /* storage unavailable */ }
+    offset = 0;
+  }
+  if (onProgress) onProgress(offset);
+
+  // 2) send the pieces, retrying a piece if the connection hiccups
+  let failures = 0;
+  while (offset < total) {
+    const end = Math.min(offset + TUS_CHUNK, total);
+    try {
+      const r = await tusRequest('PATCH', uploadUrl, Object.assign(await baseHeaders(), {
+        'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream',
+      }), blob.slice(offset, end), (loaded) => { if (onProgress) onProgress(offset + loaded); });
+      if (r.status === 204 || r.status === 200) {
+        const next = Number(r.getHeader('Upload-Offset'));
+        offset = Number.isFinite(next) && next > 0 ? next : end;
+        failures = 0;
+        if (onProgress) onProgress(offset);
+        continue;
+      }
+      if (r.status === 409 || r.status === 460) { // out of sync: ask the server where we are
+        const h = await tusRequest('HEAD', uploadUrl, await baseHeaders());
+        offset = Number(h.getHeader('Upload-Offset')) || 0;
+        continue;
+      }
+      if (r.status === 401 || r.status === 403) throw new Error(`Upload not allowed (${r.status}): ${String(r.text || '').slice(0, 160)}`);
+      throw new Error('network');
+    } catch (e) {
+      if (e && e.message && e.message !== 'network') throw e;
+      failures += 1;
+      if (failures > 12) throw new Error('The connection kept dropping — your recording is saved on this phone, try again with better signal.');
+      await tusSleep(Math.min(15000, 800 * failures * failures));
+      try { // where did the server get to?
+        const h = await tusRequest('HEAD', uploadUrl, await baseHeaders());
+        if (h.status === 200) offset = Number(h.getHeader('Upload-Offset')) || offset;
+      } catch (e2) { /* still offline: loop and retry */ }
+    }
+  }
+  try { localStorage.removeItem(keyName); } catch (e) { /* ignore */ }
+  if (onProgress) onProgress(total);
+  return path;
+}
+
+// Resumable first; if that route is not available at all, use the old single-request upload.
+async function sbUploadFast(path, blob, onProgress, resumeId) {
+  try {
+    return await sbUploadResumable(path, blob, onProgress, resumeId);
+  } catch (err) {
+    if (err && /resumable-start-failed/.test(err.message || '')) {
+      console.warn('Resumable upload not available, using plain upload:', err.message);
+      return sbUploadBlobWithProgress(path, blob, onProgress);
+    }
+    throw err;
+  }
+}
+
 async function sbUploadDataUrl(path, dataUrl) {
   const res = await fetch(dataUrl);
   const blob = await res.blob();

@@ -4,8 +4,8 @@
 
 // The minimum length enforcement itself stays fully active — this is just the config for it,
 // not shown on-screen to drivers anymore (per the uncle's request), but still blocks Save &
-// Upload if a recording comes in short. PTI lowered to 3:30 per his request.
-const MIN_SECONDS = { PTI: 3.5 * 60, HOOK: 60, DROP: 60 };
+// Upload if a recording comes in short. PTI is 3:00 (was 3:30) so files stay smaller and upload faster.
+const MIN_SECONDS = { PTI: 3 * 60, HOOK: 60, DROP: 60 };
 
 const state = {
   role: 'driver',
@@ -1309,10 +1309,23 @@ function formatElapsed(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function setUploadProgress(fraction) {
+let uploadSpeedMark = null;
+function setUploadProgress(fraction, info) {
   const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)));
   $('#upload-progress-fill').style.width = pct + '%';
   $('#upload-percent').textContent = pct + '%';
+  const det = $('#upload-detail');
+  if (det && info && info.total) {
+    const mb = (n) => (n / 1048576).toFixed(n >= 10485760 ? 0 : 1);
+    const now = Date.now();
+    if (!uploadSpeedMark || info.loaded < uploadSpeedMark.loaded) uploadSpeedMark = { t: now, loaded: info.loaded, speed: 0 };
+    if (now - uploadSpeedMark.t >= 2000) {
+      uploadSpeedMark = { t: now, loaded: info.loaded, speed: (info.loaded - uploadSpeedMark.loaded) / ((now - uploadSpeedMark.t) / 1000) };
+    }
+    const sp = uploadSpeedMark.speed;
+    const left = sp > 0 ? Math.ceil((info.total - info.loaded) / sp) : 0;
+    det.textContent = `${mb(info.loaded)} of ${mb(info.total)} MB` + (sp > 0 ? ` · ${(sp / 1048576).toFixed(1)} MB/s · about ${left >= 60 ? Math.ceil(left / 60) + ' min' : left + ' sec'} left` : '');
+  }
 }
 
 function startUploadTimer() {
@@ -1333,6 +1346,8 @@ function showUploadScreen() {
   $('#upload-progress-wrap').style.display = 'block';
   $('#upload-error-actions').style.display = 'none';
   $('#btn-upload-done').style.display = 'none';
+  uploadSpeedMark = null;
+  if ($('#upload-detail')) $('#upload-detail').textContent = '';
   setUploadProgress(0);
   startUploadTimer();
   window.onbeforeunload = () => 'An upload is still in progress. Leave anyway?';
@@ -1352,24 +1367,23 @@ async function performUpload(p, onProgress) {
   let uploadedBytes = 0;
 
   const videoPath = `${p.fleetCode}/${p.type}/${p.id}/video.${p.videoExt}`;
-  await sbUploadBlobWithProgress(videoPath, p.videoBlob, (loaded) => {
-    onProgress((uploadedBytes + loaded) / totalBytes);
-  });
-  uploadedBytes += p.videoBlob.size;
-  onProgress(uploadedBytes / totalBytes);
+  const report = (loaded) => onProgress((uploadedBytes + loaded) / totalBytes, { loaded: uploadedBytes + loaded, total: totalBytes });
 
+  // Small marked photos first (instant), then the big video (resumable, in pieces).
   const defects = [];
   for (let i = 0; i < p.defectsRaw.length; i++) {
     const d = p.defectsRaw[i];
     const blob = photoBlobs[i];
     const photoPath = `${p.fleetCode}/${p.type}/${p.id}/defect-${i}.jpg`;
-    await sbUploadBlobWithProgress(photoPath, blob, (loaded) => {
-      onProgress((uploadedBytes + loaded) / totalBytes);
-    });
+    await sbUploadFast(photoPath, blob, report, `${p.id}-d${i}`);
     uploadedBytes += blob.size;
-    onProgress(uploadedBytes / totalBytes);
+    report(0);
     defects.push({ id: d.id, t: d.t, x: d.x, y: d.y, photo_path: photoPath });
   }
+
+  await sbUploadFast(videoPath, p.videoBlob, report, `${p.id}-video`);
+  uploadedBytes += p.videoBlob.size;
+  report(0);
 
   const { error } = await sbInsertInspection({
     id: p.id,

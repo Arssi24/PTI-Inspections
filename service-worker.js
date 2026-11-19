@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pti-inspections-v49';
+const CACHE_NAME = 'pti-inspections-v50';
 const CORE_ASSETS = [
   './', './index.html', './manifest.json', './css/styles.css',
   './js/app.js', './js/offlineQueue.js', './js/qrcode.min.js', './js/jsQR.min.js',

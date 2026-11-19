@@ -2,7 +2,7 @@
    button usable while recording. The raw MediaRecorder file is rebuilt into a proper seekable
    MP4 (see mp4Repair.js) and checked before it goes to the review screen. */
 
-const LIVE_VIDEO_BPS = 6000000;
+const LIVE_VIDEO_BPS = 3000000; // was 6 Mbps; half the file size = half the upload time
 const LIVE_AUDIO_BPS = 128000;
 const LIVE = {
   stream: null, recorder: null, chunks: [], t0: 0, timer: null,

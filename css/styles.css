@@ -672,3 +672,5 @@ body::before {
   border: 1px solid rgba(0,0,0,0.15); background: #fff; color: var(--navy);
   border-radius: 8px; padding: 3px 9px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
 }
+
+.upload-detail { margin-top: 6px; font-size: 13px; color: var(--text-mute); text-align: center; }

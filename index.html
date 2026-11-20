@@ -491,7 +491,15 @@
           <div class="filter-group" id="filter-time">
             <button class="chip active" data-range="today">Today</button>
             <button class="chip" data-range="7d">Last 7 Days</button>
-            <input type="date" id="filter-date-input" class="chip date-input-chip" />
+            <button class="chip" data-range="30d">Last 30 Days</button>
+            <button class="chip" data-range="all">All</button>
+          </div>
+          <div class="range-box" id="range-box" title="Pick a start and an end date to see everything in between">
+            <span class="range-label">From</span>
+            <input type="date" id="filter-from" class="range-input" />
+            <span class="range-label">to</span>
+            <input type="date" id="filter-to" class="range-input" />
+            <button type="button" class="range-clear" id="filter-range-clear" style="display:none;">Clear</button>
           </div>
           <div class="combo" id="combo-unit">
             <input type="text" class="field field-inline combo-input" id="filter-unit-input" placeholder="All Trucks &amp; Trailers" autocomplete="off" />
@@ -514,6 +522,7 @@
 
       <!-- Fleet Units panel -->
       <div class="dash-panel" id="panel-units">
+       <div class="units-layout">
         <div class="card unit-add-card">
           <label class="field-label">Unit number</label>
           <input class="field" type="text" id="unit-number-input" placeholder="e.g. TRK-612" autocomplete="off" />
@@ -526,6 +535,7 @@
           <button class="btn btn-primary btn-block" id="btn-add-unit">Add to Fleet</button>
         </div>
         <div id="units-list" class="entry-list"></div>
+       </div>
       </div>
 
       <!-- Drivers panel -->

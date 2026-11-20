@@ -33,6 +33,8 @@ const state = {
   defects: [],
   finalDurationSec: 0,
   dashRange: 'today',
+  dashFrom: '',
+  dashTo: '',
   dashDriver: '',
   dashType: '',
   dashUnit: '',
@@ -379,16 +381,32 @@ async function init() {
       $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       state.dashRange = chip.dataset.range;
+      clearDateRangeInputs();
       renderDashboard();
     });
   });
-  $('#filter-date-input').addEventListener('change', (e) => {
-    if (!e.target.value) return;
-    state.dashRange = 'date';
-    state.dashCustomDate = e.target.value;
-    $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
-    $('#filter-date-input').classList.add('active');
+  // From / to calendar: everything between the two dates (either one can be left empty).
+  const onRangeChange = () => {
+    state.dashFrom = $('#filter-from').value;
+    state.dashTo = $('#filter-to').value;
+    if (!state.dashFrom && !state.dashTo) {
+      clearDateRangeInputs();
+      state.dashRange = 'today';
+      $$('#filter-time .chip').forEach((c) => c.classList.toggle('active', c.dataset.range === 'today'));
+    } else {
+      state.dashRange = 'range';
+      $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
+      $('#range-box').classList.add('active');
+      $('#filter-range-clear').style.display = 'inline-block';
+    }
     renderDashboard();
+  };
+  $('#filter-from').addEventListener('change', onRangeChange);
+  $('#filter-to').addEventListener('change', onRangeChange);
+  $('#filter-range-clear').addEventListener('click', () => {
+    $('#filter-from').value = '';
+    $('#filter-to').value = '';
+    onRangeChange();
   });
   $('#filter-type').addEventListener('change', (e) => { state.dashType = e.target.value; renderDashboard(); });
 
@@ -2148,15 +2166,30 @@ function fillSettingsPanel() {
   const e = $('#set-email'); if (e) e.textContent = state.driverEmail || '—';
 }
 
+function clearDateRangeInputs() {
+  state.dashFrom = '';
+  state.dashTo = '';
+  const f = $('#filter-from'); if (f) f.value = '';
+  const t = $('#filter-to'); if (t) t.value = '';
+  const b = $('#range-box'); if (b) b.classList.remove('active');
+  const c = $('#filter-range-clear'); if (c) c.style.display = 'none';
+}
+
 function inRange(ts, range) {
   const now = new Date();
   const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
   const todayStart = startOfDay(now);
   if (range === 'today') return ts >= todayStart;
   if (range === '7d') return ts >= todayStart - 6 * 86400000;
-  if (range === 'date' && state.dashCustomDate) {
-    const picked = new Date(state.dashCustomDate + 'T00:00:00').getTime();
-    return ts >= picked && ts < picked + 86400000;
+  if (range === '30d') return ts >= todayStart - 29 * 86400000;
+  if (range === 'range') {
+    const fromStart = state.dashFrom ? new Date(state.dashFrom + 'T00:00:00').getTime() : null;
+    const toStart = state.dashTo ? new Date(state.dashTo + 'T00:00:00').getTime() : null;
+    let lo = fromStart;
+    let hi = toStart != null ? toStart + 86400000 : null;
+    // if the two dates were picked in the wrong order, treat them as a window anyway
+    if (fromStart != null && toStart != null && fromStart > toStart) { lo = toStart; hi = fromStart + 86400000; }
+    return (lo == null || ts >= lo) && (hi == null || ts < hi);
   }
   return true;
 }
@@ -2260,8 +2293,8 @@ async function renderDashboard() {
     state.dashType = '';
     state.dashOnlyDefects = false;
     $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
-    $('#filter-date-input').classList.remove('active');
-    $('#filter-date-input').value = '';
+    clearDateRangeInputs();
+    $$('#filter-time .chip[data-range="all"]').forEach((c) => c.classList.add('active'));
     $('#filter-driver-input').value = '';
     $('#filter-unit-input').value = '';
     $('#filter-type').value = '';

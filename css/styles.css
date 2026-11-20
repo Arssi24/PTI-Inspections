@@ -799,3 +799,30 @@ body::before {
 #screen-dashboard .btn-secondary { background: #efeafa; }
 #screen-dashboard .filter-group { background: #efeafa; }
 #screen-dashboard .entry-type.PTI { background: var(--primary); }
+
+
+/* ---- manager dashboard: use the whole screen ---- */
+.dash-main { max-width: none; padding-left: 32px; padding-right: 32px; }
+.dash-main .card, .dash-main .entry-card { max-width: none; }
+.dash-list .entry-card { max-width: none; }
+
+/* ---- Trucks & Trailers: list on the left, "Add to Fleet" box on the right ---- */
+.units-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+.units-layout #units-list { grid-column: 1; grid-row: 1; }
+.units-layout .unit-add-card { grid-column: 2; grid-row: 1; position: sticky; top: 20px; max-width: none; margin-bottom: 0; }
+#panel-units #units-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-content: start; }
+#panel-units #units-list .empty-state { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .dash-main { padding-left: 14px; padding-right: 14px; }
+  .units-layout { grid-template-columns: 1fr; }
+  .units-layout .unit-add-card { grid-column: 1; grid-row: 1; position: static; }
+  .units-layout #units-list { grid-column: 1; grid-row: 2; }
+}
+
+/* ---- Inspections: from / to calendar ---- */
+.range-box { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 4px 10px; }
+.range-box.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(90,63,184,0.15); }
+.range-label { font-size: 12.5px; font-weight: 700; color: var(--text-mute); }
+.range-input { border: none; background: transparent; font: inherit; font-size: 13.5px; color: var(--text); padding: 6px 2px; color-scheme: light; min-width: 128px; }
+.range-input:focus { outline: none; }
+.range-clear { border: none; background: var(--primary-light); color: var(--primary-dark); border-radius: 8px; padding: 5px 10px; font-weight: 800; font-size: 12px; cursor: pointer; }

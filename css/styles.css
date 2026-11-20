@@ -14,6 +14,9 @@
   --red: #c0392b;
   --green: #1e9e5a;
   --amber: #d6901e;
+  --orange: #f08a24;
+  --orange-dark: #cf6d10;
+  --orange-light: #fff1e0;
   --purple-drop: #8b3fd6;
   --bg: #f4f6fa;
   --card: #ffffff;
@@ -674,3 +677,125 @@ body::before {
 }
 
 .upload-detail { margin-top: 6px; font-size: 13px; color: var(--text-mute); text-align: center; }
+
+
+/* =====================================================================
+   Fleet manager layout: left sidebar + main area (light green / orange / white)
+   ===================================================================== */
+.dash-layout { display: flex; min-height: 100vh; background: var(--bg); }
+.dash-sidebar {
+  width: 250px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 50;
+}
+.side-brand { padding: 22px 18px 14px; border-bottom: 1px solid var(--border); text-align: center; }
+.side-brand-logo { display: inline-block; background: #fff; border-radius: 12px; padding: 6px 10px; }
+.side-brand-logo img { display: block; width: 150px; height: auto; }
+.side-brand-sub { margin-top: 6px; font-size: 11.5px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; color: var(--orange-dark); }
+.side-nav { flex: 1; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.side-item {
+  position: relative; display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 14px; border: none; background: transparent; border-radius: 12px;
+  font: inherit; font-size: 14.5px; font-weight: 700; color: #4b5563; cursor: pointer; text-align: left;
+  margin: 0; border-bottom: none;
+}
+.side-item .icon { width: 20px; height: 20px; color: #7b8794; }
+.side-item:hover { background: #f6f3fc; color: #3b2a85; }
+.side-item.active, .dash-tab.side-item.active { background: var(--primary-light); color: #3f2c92; border-bottom: none; }
+.side-item.active .icon { color: var(--primary); }
+.side-item.active::before {
+  content: ''; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--orange);
+}
+.side-foot { padding: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.side-user { display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
+.side-user-avatar {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--orange); color: #fff; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.side-user-info { min-width: 0; }
+.side-user-name { font-weight: 800; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-user-role { font-size: 11.5px; color: var(--text-mute); }
+.side-logout { color: #b3261e; }
+.side-logout .icon { color: #b3261e; }
+.side-logout:hover { background: #fdf0ee; color: #b3261e; }
+
+.dash-main { flex: 1; min-width: 0; padding: 0 28px 60px; max-width: 1180px; }
+.dash-topbar {
+  display: flex; align-items: center; gap: 14px; padding: max(22px, calc(env(safe-area-inset-top) + 12px)) 0 18px;
+}
+.dash-topbar-title { flex: 1; min-width: 0; }
+.dash-page-title { font-size: 24px; font-weight: 800; }
+.dash-menu-btn {
+  display: none; width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border); background: #fff;
+  align-items: center; justify-content: center; color: var(--navy-dark); cursor: pointer; flex-shrink: 0;
+}
+.dash-scrim { display: none; }
+
+/* overview */
+.ov-stats .stat-card { border-top: 3px solid var(--primary); }
+.ov-stats .stat-card.orange { border-top-color: var(--orange); }
+.ov-stats .stat-card.red { border-top-color: var(--red); }
+.ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ov-card { padding: 18px; }
+.ov-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ov-card h3 { margin: 0; font-size: 16px; }
+.ov-card-sub { font-size: 12px; color: var(--text-mute); }
+.ov-link { border: none; background: none; color: var(--orange-dark); font-weight: 800; font-size: 13px; cursor: pointer; padding: 0; }
+.ov-list { display: flex; flex-direction: column; }
+.ov-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--border); font-size: 13.5px; }
+.ov-row:first-child { border-top: none; }
+.ov-row-main { flex: 1; min-width: 0; }
+.ov-row-title { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-row-sub { color: var(--text-mute); font-size: 12.5px; }
+.ov-row.clickable { cursor: pointer; }
+.ov-empty { padding: 22px 6px; text-align: center; color: var(--text-mute); font-size: 13.5px; }
+
+/* add driver + settings cards */
+.add-driver-card { max-width: 520px; margin-bottom: 18px; }
+.panel-card-title { margin: 0 0 6px; font-size: 18px; }
+.settings-card { max-width: 760px; margin-bottom: 18px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--border); }
+.set-row:first-of-type { border-top: none; }
+.set-label { font-weight: 800; font-size: 14.5px; }
+.set-help { font-size: 12.5px; color: var(--text-mute); margin-top: 2px; max-width: 420px; }
+.set-row-value { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; font-size: 14px; color: var(--text); }
+.set-row-value strong { letter-spacing: 1px; color: var(--navy-dark); }
+.mgr-code-chip { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.fleet-code-chip { border-color: #f6c590; background: var(--orange-light); color: #9a5a12; }
+.fleet-code-chip strong { color: var(--orange-dark); }
+
+@media (max-width: 900px) {
+  .dash-layout { display: block; }
+  .dash-sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; height: auto; transform: translateX(-102%);
+    transition: transform .22s ease; box-shadow: 8px 0 30px rgba(16,24,40,0.18); width: min(82vw, 290px);
+  }
+  #screen-dashboard.side-open .dash-sidebar { transform: translateX(0); }
+  #screen-dashboard.side-open .dash-scrim { display: block; position: fixed; inset: 0; background: rgba(16,24,40,0.45); z-index: 40; }
+  .dash-menu-btn { display: flex; }
+  .dash-main { padding: 0 14px 50px; max-width: none; }
+  .dash-topbar { padding-top: max(16px, calc(env(safe-area-inset-top) + 10px)); }
+  .dash-topbar .fleet-code-chip { display: none; }
+  .dash-page-title { font-size: 20px; }
+  .ov-grid { grid-template-columns: 1fr; }
+  .set-row { flex-direction: column; align-items: flex-start; }
+  .set-row-value { justify-content: flex-start; }
+}
+
+.stat-of { font-size: 15px; font-weight: 700; color: var(--text-mute); }
+
+
+/* =====================================================================
+   Green / orange / white theme: ONLY on the fleet manager dashboard.
+   (The driver side keeps the original look.)
+   ===================================================================== */
+#screen-dashboard {
+  --navy: #5a3fb8; --navy-dark: #43308f; --navy-darker: #2f2169;
+  --primary: #5a3fb8; --primary-dark: #43308f; --primary-light: #efeafa; --primary-gradient: #5a3fb8;
+  --steel: #f28c28; --amber: #f28c28; --purple-drop: #8a7cc0;
+  --bg: #f8f7fc;
+}
+#screen-dashboard .btn-primary { box-shadow: 0 4px 14px rgba(90,63,184,0.30); }
+#screen-dashboard .btn-secondary { background: #efeafa; }
+#screen-dashboard .filter-group { background: #efeafa; }
+#screen-dashboard .entry-type.PTI { background: var(--primary); }

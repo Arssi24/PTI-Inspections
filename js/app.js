@@ -315,6 +315,17 @@ async function init() {
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
   $('#drivers-search').addEventListener('input', applyDriversSearch);
   setupManagerCodeChip();
+  $('#btn-add-driver').addEventListener('click', onAddDriver);
+  $('#btn-ad-another').addEventListener('click', resetAddDriverForm);
+  $('#btn-ad-drivers').addEventListener('click', () => switchDashTab('drivers'));
+  $('#btn-side-toggle').addEventListener('click', () => setSideDrawer(!$('#screen-dashboard').classList.contains('side-open')));
+  $('#dash-scrim').addEventListener('click', () => setSideDrawer(false));
+  $('#ov-all-link').addEventListener('click', () => switchDashTab('inspections'));
+  $('#btn-copy-fleet-code').addEventListener('click', async () => {
+    const btn = $('#btn-copy-fleet-code');
+    try { await navigator.clipboard.writeText(state.fleetCode || ''); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Select & copy'; }
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
+  });
   [['#bar-managers', '#managers-body'], ['#bar-drivers', '#drivers-body']].forEach(([barSel, bodySel]) => {
     $(barSel).addEventListener('click', () => {
       const bar = $(barSel);
@@ -767,6 +778,9 @@ async function loginAs(profile) {
     checkPendingUploads();
   } else {
     $('#fleet-code-value').textContent = profile.fleet_code;
+    state.fleetCode = profile.fleet_code;
+    $('#side-user-name').textContent = profile.name || 'Fleet manager';
+    $('#side-user-avatar').textContent = (profile.name || 'M').trim().charAt(0).toUpperCase();
     state.dashDriver = '';
     state.dashUnit = '';
     state.dashType = '';
@@ -776,7 +790,7 @@ async function loginAs(profile) {
     $('#filter-unit-input').value = '';
     $('#filter-type').value = '';
     showScreen('screen-dashboard');
-    renderDashboard();
+    switchDashTab('overview');
   }
 }
 
@@ -1957,12 +1971,181 @@ function renderDriverRowEdit(row, d) {
 
 /* ---------------- fleet manager dashboard ---------------- */
 
+const DASH_PAGE_TITLES = {
+  overview: ['Dashboard', 'Today at a glance, synced in real time'],
+  inspections: ['Inspections', 'All driver inspections, videos and flagged photos'],
+  units: ['Trucks & Trailers', 'Your fleet units and their QR codes'],
+  drivers: ['Drivers', 'Everyone signed up with your fleet code'],
+  adddriver: ['Add Driver', 'Create a driver account that is linked to your fleet'],
+  settings: ['Settings', 'Fleet codes and your account'],
+};
+
+function setSideDrawer(open) {
+  const scr = $('#screen-dashboard');
+  if (scr) scr.classList.toggle('side-open', Boolean(open));
+}
+
 function switchDashTab(panel) {
   $$('.dash-tab').forEach((t) => t.classList.toggle('active', t.dataset.panel === panel));
   $$('.dash-panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${panel}`));
+  const titles = DASH_PAGE_TITLES[panel] || ['', ''];
+  $('#dash-page-title').textContent = titles[0];
+  $('#dash-page-sub').textContent = titles[1];
+  setSideDrawer(false);
+  try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+  if (panel === 'overview') renderOverview();
   if (panel === 'units') renderUnitsList();
   if (panel === 'inspections') renderDashboard();
   if (panel === 'drivers') renderDriversList();
+  if (panel === 'adddriver') resetAddDriverForm();
+  if (panel === 'settings') fillSettingsPanel();
+}
+
+/* ---------------- dashboard overview ---------------- */
+
+async function renderOverview() {
+  const statsEl = $('#ov-stats');
+  const attEl = $('#ov-attention');
+  const latestEl = $('#ov-latest');
+  if (!statsEl) return;
+  attEl.innerHTML = '<div class="ov-empty">Loading…</div>';
+  latestEl.innerHTML = '<div class="ov-empty">Loading…</div>';
+  let all = [];
+  let drivers = [];
+  try {
+    [all, drivers] = await Promise.all([sbGetInspections(state.fleetCode), sbGetFleetDrivers(state.fleetCode)]);
+    if (state.role === 'manager') all = await purgeExpiredInspections(all);
+  } catch (err) {
+    statsEl.innerHTML = '';
+    attEl.innerHTML = '<div class="ov-empty">Could not load — try again in a moment.</div>';
+    latestEl.innerHTML = '';
+    return;
+  }
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todays = all.filter((r) => new Date(r.created_at) >= startOfToday);
+  const flaggedToday = todays.filter((r) => r.defects && r.defects.length > 0).length;
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const recent = all.filter((r) => new Date(r.created_at).getTime() >= weekAgo);
+  const counts = { green: 0, yellow: 0, red: 0 };
+  const needs = [];
+  drivers.forEach((d) => {
+    const st = computePtiStatus(d, recent);
+    counts[st.level] += 1;
+    if (st.level !== 'green') needs.push({ d, st });
+  });
+  needs.sort((a, b) => (a.st.level === 'red' ? 0 : 1) - (b.st.level === 'red' ? 0 : 1) || (a.d.name || '').localeCompare(b.d.name || ''));
+
+  statsEl.innerHTML = `
+    <button class="stat-card" type="button" data-go="inspections"><div class="stat-num">${todays.length}</div><div class="stat-label">Inspections today</div></button>
+    <button class="stat-card" type="button" data-go="drivers"><div class="stat-num">${counts.green}<span class="stat-of"> / ${drivers.length}</span></div><div class="stat-label">Drivers done with PTI</div></button>
+    <button class="stat-card red" type="button" data-go="drivers"><div class="stat-num">${counts.red}</div><div class="stat-label">Missing PTI</div></button>
+    <button class="stat-card orange" type="button" data-go="inspections"><div class="stat-num">${flaggedToday}</div><div class="stat-label">Flagged today</div></button>
+    <button class="stat-card" type="button" data-go="inspections"><div class="stat-num">${all.length}</div><div class="stat-label">Total on record</div></button>
+  `;
+  statsEl.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => switchDashTab(b.dataset.go)));
+
+  if (drivers.length === 0) {
+    attEl.innerHTML = '<div class="ov-empty">No drivers yet. Use <strong>Add Driver</strong> in the menu to create one.</div>';
+  } else if (needs.length === 0) {
+    attEl.innerHTML = '<div class="ov-empty">Everyone has done their PTI today.</div>';
+  } else {
+    attEl.innerHTML = needs.slice(0, 8).map(({ d, st }) => `
+      <div class="ov-row clickable" data-go="drivers">
+        <span class="pti-dot pti-${st.level}"></span>
+        <div class="ov-row-main"><div class="ov-row-title">${escapeHtml(d.name)}</div><div class="ov-row-sub">${escapeHtml(st.text)}</div></div>
+      </div>`).join('') + (needs.length > 8 ? `<div class="ov-empty">+ ${needs.length - 8} more in Drivers</div>` : '');
+    attEl.querySelectorAll('[data-go]').forEach((r) => r.addEventListener('click', () => switchDashTab(r.dataset.go)));
+  }
+
+  if (all.length === 0) {
+    latestEl.innerHTML = '<div class="ov-empty">No inspections yet.</div>';
+  } else {
+    latestEl.innerHTML = all.slice(0, 7).map((r) => `
+      <div class="ov-row clickable" data-go="inspections">
+        <span class="entry-type ${escapeHtml(r.type)}">${escapeHtml(r.type)}</span>
+        <div class="ov-row-main"><div class="ov-row-title">${escapeHtml(r.unit)} · ${escapeHtml(r.driver_name)}</div><div class="ov-row-sub">${escapeHtml(fmtWhen(new Date(r.created_at).getTime()))}${r.defects && r.defects.length ? ` · ${r.defects.length} flagged` : ''}</div></div>
+      </div>`).join('');
+    latestEl.querySelectorAll('[data-go]').forEach((r) => r.addEventListener('click', () => switchDashTab(r.dataset.go)));
+  }
+}
+
+/* ---------------- add driver (manager creates the account) ---------------- */
+
+function resetAddDriverForm() {
+  ['#ad-name', '#ad-email', '#ad-phone', '#ad-password', '#ad-password2', '#ad-unit'].forEach((s) => { const el = $(s); if (el) el.value = ''; });
+  const f = $('#ad-fleet'); if (f) f.value = state.fleetCode || '';
+  const e = $('#ad-error'); if (e) e.style.display = 'none';
+  const b = $('#btn-add-driver'); if (b) { b.disabled = false; b.textContent = 'Create Driver Account'; }
+  $('#add-driver-form').style.display = 'block';
+  $('#add-driver-done').style.display = 'none';
+}
+
+async function onAddDriver() {
+  const errEl = $('#ad-error');
+  const showErr = (m) => { errEl.textContent = m; errEl.style.display = 'block'; };
+  errEl.style.display = 'none';
+  const name = $('#ad-name').value.trim();
+  let email = $('#ad-email').value.trim().toLowerCase();
+  const phone = $('#ad-phone').value.trim();
+  const password = $('#ad-password').value;
+  const password2 = $('#ad-password2').value;
+  const unit = $('#ad-unit').value.trim();
+  if (!name || !email || !password) { showErr('Fill in the name, login and password.'); return; }
+  if (!email.includes('@')) email += '@gmail.com';
+  if (phone.replace(/\D/g, '').length < 10) { showErr('Enter the driver\'s phone number (at least 10 digits).'); return; }
+  if (password.length < 6) { showErr('Password must be at least 6 characters.'); return; }
+  if (password !== password2) { showErr('Passwords don\'t match — check both fields.'); return; }
+
+  const btn = $('#btn-add-driver');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  let newId = null;
+  try {
+    // A throw-away connection, so the manager stays logged in as themselves.
+    const cfg = window.SUPABASE_CONFIG;
+    const c = window.supabase.createClient(cfg.url, cfg.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { data, error } = await c.auth.signUp({
+      email, password,
+      options: { data: { name, phone, role: 'driver', fleet_code: state.fleetCode, manager_code: '' } },
+    });
+    if (error) throw error;
+    newId = data && data.user ? data.user.id : null;
+    if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('That login is already used by someone else.');
+    }
+    try { await c.auth.signOut(); } catch (e) { /* ignore */ }
+  } catch (err) {
+    console.error('Add driver failed', err);
+    const msg = err && err.message ? err.message : 'try again';
+    showErr(/already|registered/i.test(msg) ? 'That login is already used by someone else.' : 'Could not create the account: ' + msg);
+    btn.disabled = false;
+    btn.textContent = 'Create Driver Account';
+    return;
+  }
+  if (newId && unit) {
+    try { await sbUpdateDriver(newId, { assigned_unit: unit }); } catch (e) { console.warn('Could not set assigned unit', e); }
+  }
+  let verifyHtml = '';
+  const v = await verifyDriverLogin(email, password);
+  verifyHtml = v.ok
+    ? '<div class="driver-done-ok">✔ Checked: this login and password work.</div>'
+    : `<div class="driver-done-bad">Created, but the check could not log in (${escapeHtml(v.message)}). Try the Drivers tab → Edit to set the password again.</div>`;
+  $('#ad-done-title').textContent = `Driver created: ${name}`;
+  $('#ad-done-box').innerHTML = `<div>Login: <strong>${escapeHtml(email)}</strong></div><div>Password: <strong>${escapeHtml(password)}</strong></div>${unit ? `<div>Truck/trailer: <strong>${escapeHtml(unit)}</strong></div>` : ''}`;
+  $('#ad-done-check').innerHTML = verifyHtml;
+  $('#add-driver-form').style.display = 'none';
+  $('#add-driver-done').style.display = 'block';
+}
+
+/* ---------------- settings ---------------- */
+
+function fillSettingsPanel() {
+  const fc = $('#fleet-code-value-2'); if (fc) fc.textContent = state.fleetCode || '—';
+  const n = $('#set-name'); if (n) n.textContent = state.driverName || '—';
+  const e = $('#set-email'); if (e) e.textContent = state.driverEmail || '—';
 }
 
 function inRange(ts, range) {

@@ -808,7 +808,7 @@ body::before {
 
 /* ---- Trucks & Trailers: list on the left, "Add to Fleet" box on the right ---- */
 .units-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
-.units-layout #units-list { grid-column: 1; grid-row: 1; }
+.units-layout .units-main { grid-column: 1; grid-row: 1; min-width: 0; }
 .units-layout .unit-add-card { grid-column: 2; grid-row: 1; position: sticky; top: 20px; max-width: none; margin-bottom: 0; }
 #panel-units #units-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-content: start; }
 #panel-units #units-list .empty-state { grid-column: 1 / -1; }
@@ -816,7 +816,7 @@ body::before {
   .dash-main { padding-left: 14px; padding-right: 14px; }
   .units-layout { grid-template-columns: 1fr; }
   .units-layout .unit-add-card { grid-column: 1; grid-row: 1; position: static; }
-  .units-layout #units-list { grid-column: 1; grid-row: 2; }
+  .units-layout .units-main { grid-column: 1; grid-row: 2; }
 }
 
 /* ---- Inspections: from / to calendar ---- */

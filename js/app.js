@@ -316,6 +316,7 @@ async function init() {
   $('#btn-live-record').addEventListener('click', onLiveRecordToggle);
   $('#btn-torch').addEventListener('click', toggleLiveTorch);
   $('#drivers-search').addEventListener('input', applyDriversSearch);
+  $('#units-search').addEventListener('input', applyUnitsSearch);
   setupManagerCodeChip();
   $('#btn-add-driver').addEventListener('click', onAddDriver);
   $('#btn-ad-another').addEventListener('click', resetAddDriverForm);
@@ -1640,6 +1641,7 @@ async function renderUnitsList() {
   mine.forEach((u) => {
     const row = document.createElement('div');
     row.className = 'entry-card unit-row';
+    row.dataset.search = `${u.unit} ${u.kind === 'truck' ? 'truck' : 'trailer'}`.toLowerCase();
     row.innerHTML = `
       <div class="unit-row-left">
         <div class="unit-qr-thumb"></div>
@@ -1667,6 +1669,33 @@ async function renderUnitsList() {
     });
     list.appendChild(row);
   });
+  applyUnitsSearch();
+}
+
+// Hides unit rows that don't match what is typed in the Trucks & Trailers search bar.
+function applyUnitsSearch() {
+  const input = $('#units-search');
+  const list = $('#units-list');
+  if (!input || !list) return;
+  const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  list.querySelectorAll('.unit-row').forEach((row) => {
+    const hay = row.dataset.search || '';
+    const match = words.every((w) => hay.includes(w));
+    row.style.display = match ? '' : 'none';
+    if (match) shown += 1;
+  });
+  let none = list.querySelector('.units-no-match');
+  if (words.length && shown === 0 && list.querySelector('.unit-row')) {
+    if (!none) {
+      none = document.createElement('div');
+      none.className = 'empty-state units-no-match';
+      list.appendChild(none);
+    }
+    none.textContent = 'No truck or trailer matches "' + input.value.trim() + '".';
+  } else if (none) {
+    none.remove();
+  }
 }
 
 // Manager security code on the dashboard: tap Show to reveal it, "New code" (tap twice) changes it.

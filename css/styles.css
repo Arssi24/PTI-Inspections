@@ -826,3 +826,38 @@ body::before {
 .range-input { border: none; background: transparent; font: inherit; font-size: 13.5px; color: var(--text); padding: 6px 2px; color-scheme: light; min-width: 128px; }
 .range-input:focus { outline: none; }
 .range-clear { border: none; background: var(--primary-light); color: var(--primary-dark); border-radius: 8px; padding: 5px 10px; font-weight: 800; font-size: 12px; cursor: pointer; }
+
+
+/* ---- manager video player: big centre play, click anywhere, full screen, time on the left ---- */
+.cvp-shell { margin-top: 10px; }
+.cvp-stage { position: relative; background: #000; border-radius: 12px; overflow: hidden; display: flex; justify-content: center; cursor: pointer; }
+.entry-video-wrap .cvp-stage video { width: 100%; max-height: 72vh; border-radius: 0; display: block; background: #000; }
+.cvp-bigplay {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 76px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 6px 24px rgba(0,0,0,0.35); transition: transform .12s ease, background .12s ease;
+}
+.cvp-bigplay:hover { background: rgba(0,0,0,0.72); transform: translate(-50%, -50%) scale(1.06); }
+.cvp-bigplay svg { width: 36px; height: 36px; margin-left: 4px; }
+.cvp-shell .cvp-controls { margin-top: 8px; }
+.cvp-time-left { font-size: 12.5px; font-weight: 700; color: var(--text); padding: 0 6px 0 2px; }
+.cvp-fs { margin-left: 2px; }
+.cvp-shell:fullscreen { display: flex; flex-direction: column; background: #000; margin: 0; width: 100vw; height: 100vh; }
+.cvp-shell:-webkit-full-screen { display: flex; flex-direction: column; background: #000; margin: 0; width: 100vw; height: 100vh; }
+.cvp-shell:fullscreen .cvp-stage, .cvp-shell:-webkit-full-screen .cvp-stage { flex: 1; min-height: 0; border-radius: 0; }
+.cvp-shell:fullscreen .cvp-stage video, .cvp-shell:-webkit-full-screen .cvp-stage video { max-height: none; height: 100%; width: 100%; object-fit: contain; }
+.cvp-shell:fullscreen .cvp-controls, .cvp-shell:-webkit-full-screen .cvp-controls { margin: 0; border-radius: 0; border: none; border-top: 1px solid #333; background: #111; padding: 10px 16px; }
+.cvp-shell:fullscreen .cvp-btn, .cvp-shell:-webkit-full-screen .cvp-btn { color: #fff; }
+.cvp-shell:fullscreen .cvp-btn:hover, .cvp-shell:-webkit-full-screen .cvp-btn:hover { background: rgba(255,255,255,0.14); }
+.cvp-shell:fullscreen .cvp-time-left, .cvp-shell:-webkit-full-screen .cvp-time-left { color: #fff; }
+
+/* ---- Drivers: status cards are filter buttons ---- */
+.drv-filter { font: inherit; color: inherit; }
+.drv-filter.active-filter { border-color: var(--primary); background: var(--primary-light); box-shadow: 0 0 0 2px rgba(90,63,184,0.18); }
+
+
+/* legal links + consent line */
+.consent-row { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 4px; font-size: 12.5px; line-height: 1.45; color: var(--text-mute); cursor: pointer; }
+.consent-row input { width: 18px; height: 18px; margin-top: 1px; flex-shrink: 0; accent-color: var(--primary); }
+.consent-row a, .legal-links a, .field-hint a, .set-row-value a { color: var(--primary); font-weight: 700; }
+.legal-links { margin: 6px 0 0; font-size: 12.5px; color: var(--text-mute); }

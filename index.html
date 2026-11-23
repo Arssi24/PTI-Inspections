@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; connect-src 'self' blob: data: https://*.supabase.co wss://*.supabase.co; font-src 'self'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <title>YLM Record PTI</title>
 <link rel="stylesheet" href="css/styles.css" />
 
@@ -31,6 +33,7 @@
         <div class="brand-logo-wrap"><img class="brand-logo" src="assets/logo.png" alt="YLM Logistics Inc." width="700" height="212" /></div>
         <h1>YLM Record PTI</h1>
         <p class="sub">Fleet walkaround &amp; inspection app</p>
+        <p class="legal-links"><a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> &middot; <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a></p>
       </div>
 
       <div class="card">
@@ -43,13 +46,13 @@
 
         <!-- Sign up -->
         <div id="tab-signup" style="display:none;">
-          <label class="field-label">Full name</label>
+          <label class="field-label" for="signup-name">Full name</label>
           <input class="field" type="text" id="signup-name" placeholder="e.g. Mike Reyes" autocomplete="name" />
-          <label class="field-label">Email</label>
+          <label class="field-label" for="signup-email">Email</label>
           <input class="field" type="email" id="signup-email" placeholder="you@company.com" autocomplete="email" />
-          <label class="field-label">Phone number</label>
+          <label class="field-label" for="signup-phone">Phone number</label>
           <input class="field" type="tel" id="signup-phone" placeholder="(555) 555-0100" autocomplete="tel" />
-          <label class="field-label">Password</label>
+          <label class="field-label" for="signup-password">Password</label>
           <div class="password-field">
             <input class="field" type="password" id="signup-password" placeholder="Choose a password" autocomplete="new-password" />
             <button class="password-toggle-btn" type="button" title="Show password">
@@ -57,7 +60,7 @@
               <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
             </button>
           </div>
-          <label class="field-label">Repeat password</label>
+          <label class="field-label" for="signup-password-confirm">Repeat password</label>
           <div class="password-field">
             <input class="field" type="password" id="signup-password-confirm" placeholder="Type your password again" autocomplete="new-password" />
             <button class="password-toggle-btn" type="button" title="Show password">
@@ -73,7 +76,7 @@
           </div>
 
           <div id="signup-fleet-code-field">
-            <label class="field-label">Fleet access code</label>
+            <label class="field-label" for="signup-fleet-code">Fleet access code</label>
             <input class="field" type="text" id="signup-fleet-code" placeholder="Ask your fleet manager for this" autocomplete="off" />
           </div>
 
@@ -86,23 +89,27 @@
             <p class="field-hint" id="manager-create-hint" style="display:none;">Pick this if you're setting up a brand-new company. A new fleet code and a manager security code are created automatically for you. Give drivers only the fleet code.</p>
             <div id="manager-join-code-field">
               <p class="field-hint">Joining an existing fleet takes <strong>both codes</strong>. Drivers only need the fleet code, so never share the manager security code with them.</p>
-              <label class="field-label">Fleet code</label>
+              <label class="field-label" for="signup-manager-fleet-code">Fleet code</label>
               <input class="field" type="text" id="signup-manager-fleet-code" placeholder="The fleet code (same one drivers use)" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" />
-              <label class="field-label">Manager security code</label>
+              <label class="field-label" for="signup-manager-security-code">Manager security code</label>
               <input class="field" type="text" id="signup-manager-security-code" placeholder="Manager-only security code" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" />
               <p class="field-hint">Another manager can show you this code on their dashboard.</p>
             </div>
           </div>
 
+          <label class="consent-row" for="signup-consent">
+            <input type="checkbox" id="signup-consent" />
+            <span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>, including that inspection video (with sound), photos and my location are recorded when I submit an inspection.</span>
+          </label>
           <div class="field-error" id="signup-error" style="display:none;"></div>
           <button class="btn btn-primary btn-block" id="btn-signup">Create Account</button>
         </div>
 
         <!-- Log in -->
         <div id="tab-login">
-          <label class="field-label">Email</label>
+          <label class="field-label" for="login-email">Email</label>
           <input class="field" type="email" id="login-email" placeholder="you@company.com" autocomplete="email" />
-          <label class="field-label">Password</label>
+          <label class="field-label" for="login-password">Password</label>
           <div class="password-field">
             <input class="field" type="password" id="login-password" placeholder="Your password" autocomplete="current-password" />
             <button class="password-toggle-btn" type="button" title="Show password">
@@ -157,7 +164,7 @@
         <p class="sub" id="check-email-message">Enter the 6-digit code we just emailed you.</p>
       </div>
       <div class="card">
-        <label class="field-label">6-digit code</label>
+        <label class="field-label" for="signup-otp-code">6-digit code</label>
         <input class="field" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="signup-otp-code" placeholder="123456" autocomplete="one-time-code" />
         <div class="field-error" id="signup-otp-error" style="display:none;"></div>
         <button class="btn btn-primary btn-block" id="btn-verify-signup-otp" type="button">Verify &amp; Continue</button>
@@ -175,9 +182,9 @@
         <p class="sub">Enter the code we emailed you, then choose a new password</p>
       </div>
       <div class="card">
-        <label class="field-label">6-digit code</label>
+        <label class="field-label" for="reset-otp-code">6-digit code</label>
         <input class="field" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="reset-otp-code" placeholder="123456" autocomplete="one-time-code" />
-        <label class="field-label">New password</label>
+        <label class="field-label" for="new-password">New password</label>
         <div class="password-field">
           <input class="field" type="password" id="new-password" placeholder="At least 6 characters" autocomplete="new-password" />
           <button class="password-toggle-btn" type="button" title="Show password">
@@ -185,7 +192,7 @@
             <svg class="icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
           </button>
         </div>
-        <label class="field-label">Repeat new password</label>
+        <label class="field-label" for="new-password-confirm">Repeat new password</label>
         <div class="password-field">
           <input class="field" type="password" id="new-password-confirm" placeholder="Type it again" autocomplete="new-password" />
           <button class="password-toggle-btn" type="button" title="Show password">
@@ -434,6 +441,7 @@
         <nav class="side-nav">
           <button class="dash-tab side-item active" data-panel="overview" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Dashboard</span></button>
           <button class="dash-tab side-item" data-panel="inspections" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4z"/><path d="M8.5 13l2.3 2.3L15.5 10.5"/></svg><span>Inspections</span></button>
+          <button class="dash-tab side-item" data-panel="drophook" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Drop &amp; Hook</span></button>
           <button class="dash-tab side-item" data-panel="units" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Trucks &amp; Trailers</span></button>
           <button class="dash-tab side-item" data-panel="drivers" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="8" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 4.13a4 4 0 0 1 0 7.75"/></svg><span>Drivers</span></button>
           <button class="dash-tab side-item" data-panel="adddriver" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="8" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg><span>Add Driver</span></button>
@@ -509,7 +517,12 @@
             <input type="text" class="field field-inline combo-input" id="filter-driver-input" placeholder="All Drivers" autocomplete="off" />
             <div class="combo-list" id="filter-driver-list"></div>
           </div>
-          <select class="field field-inline" id="filter-type">
+          <div class="filter-group" id="dh-chips" style="display:none;">
+            <button class="chip active" data-dh="" type="button">All</button>
+            <button class="chip" data-dh="DROP" type="button">Drop</button>
+            <button class="chip" data-dh="HOOK" type="button">Hook</button>
+          </div>
+          <select class="field field-inline" id="filter-type" style="display:none;">
             <option value="">All Types</option>
             <option value="PTI">PTI</option>
             <option value="HOOK">HOOK</option>
@@ -524,7 +537,7 @@
       <div class="dash-panel" id="panel-units">
        <div class="units-layout">
         <div class="card unit-add-card">
-          <label class="field-label">Unit number</label>
+          <label class="field-label" for="unit-number-input">Unit number</label>
           <input class="field" type="text" id="unit-number-input" placeholder="e.g. TRK-612" autocomplete="off" />
           <label class="field-label">Type</label>
           <div class="role-toggle">
@@ -573,22 +586,22 @@
       <div class="dash-panel" id="panel-adddriver">
         <div class="card add-driver-card" id="add-driver-form">
           <h3 class="panel-card-title">Create a driver account</h3>
-          <p class="field-hint">Same form drivers use to sign up. The account is linked to your fleet automatically and the driver can log in right away.</p>
-          <label class="field-label">Full name</label>
+          <p class="field-hint">Same form drivers use to sign up. The account is linked to your fleet automatically and the driver can log in right away. By creating it you confirm the driver has been told about the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a>.</p>
+          <label class="field-label" for="ad-name">Full name</label>
           <input class="field" type="text" id="ad-name" placeholder="e.g. Mike Reyes" autocomplete="off" />
-          <label class="field-label">Email or login</label>
+          <label class="field-label" for="ad-email">Email or login</label>
           <input class="field" type="text" id="ad-email" placeholder="mike or mike@gmail.com" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
-          <label class="field-label">Phone number</label>
+          <label class="field-label" for="ad-phone">Phone number</label>
           <input class="field" type="tel" id="ad-phone" placeholder="(555) 555-0100" autocomplete="off" />
-          <label class="field-label">Password</label>
+          <label class="field-label" for="ad-password">Password</label>
           <input class="field" type="text" id="ad-password" placeholder="At least 6 characters" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
-          <label class="field-label">Repeat password</label>
+          <label class="field-label" for="ad-password2">Repeat password</label>
           <input class="field" type="text" id="ad-password2" placeholder="Type the password again" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
-          <label class="field-label">Assigned truck/trailer <span class="field-optional">(optional)</span></label>
+          <label class="field-label" for="ad-unit">Assigned truck/trailer <span class="field-optional">(optional)</span></label>
           <input class="field" type="text" id="ad-unit" placeholder="e.g. TRK-612" autocomplete="off" />
           <label class="field-label">I am a&hellip;</label>
           <div class="role-toggle"><button class="role-btn active" type="button" disabled>Driver</button></div>
-          <label class="field-label">Fleet access code</label>
+          <label class="field-label" for="ad-fleet">Fleet access code</label>
           <input class="field" type="text" id="ad-fleet" readonly />
           <div class="field-error" id="ad-error" style="display:none;"></div>
           <button class="btn btn-primary btn-block" id="btn-add-driver" type="button">Create Driver Account</button>
@@ -629,6 +642,11 @@
           </div>
         </div>
         <div class="card settings-card">
+          <h3 class="panel-card-title">Legal</h3>
+          <div class="set-row"><div class="set-row-text"><div class="set-label">Privacy Policy</div><div class="set-help">What the app collects and how long it is kept.</div></div><div class="set-row-value"><a href="privacy.html" target="_blank" rel="noopener">Open</a></div></div>
+          <div class="set-row"><div class="set-row-text"><div class="set-label">Terms of Use</div></div><div class="set-row-value"><a href="terms.html" target="_blank" rel="noopener">Open</a></div></div>
+        </div>
+        <div class="card settings-card">
           <h3 class="panel-card-title">Your account</h3>
           <div class="set-row"><div class="set-row-text"><div class="set-label">Name</div></div><div class="set-row-value" id="set-name">—</div></div>
           <div class="set-row"><div class="set-row-text"><div class="set-label">Login</div></div><div class="set-row-value" id="set-email">—</div></div>
@@ -649,6 +667,7 @@
   <img id="lightbox-img" src="" alt="Defect photo" />
 </div>
 
+<script src="js/boot.js"></script>
 <script src="js/jsQR.min.js" defer></script>
 <script src="js/qrcode.min.js"></script>
 <script src="js/supabase.umd.js"></script>
@@ -661,18 +680,5 @@
 <script src="js/wcRecorder.js"></script>
   <script src="js/liveRecorder.js"></script>
 <script src="js/app.js"></script>
-<script>
-  if ('serviceWorker' in navigator) {
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return;
-      const active = document.querySelector('.screen.active');
-      if (active && (active.id === 'screen-home' || active.id === 'screen-login')) location.reload();
-    });
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('service-worker.js').catch((err) => console.warn('SW registration failed', err));
-    });
-  }
-</script>
 </body>
 </html>

@@ -114,8 +114,12 @@ async function sbRegenerateManagerCode() {
   return data;
 }
 
+// Removes the driver's profile AND their login (their past inspections stay as company records).
 async function sbRemoveDriver(userId) {
-  return requireSb().from('profiles').delete().eq('id', userId);
+  const r = await requireSb().rpc('manager_remove_driver', { p_driver_id: userId });
+  if (!r.error) return r;
+  if (!/manager_remove_driver|schema cache|does not exist/i.test(r.error.message || '')) return r;
+  return requireSb().from('profiles').delete().eq('id', userId); // database update not installed yet
 }
 
 // Name, login (email), password and assigned unit in one go (blank login/password = unchanged).
@@ -132,10 +136,15 @@ async function sbUpdateDriver(userId, fields) {
 
 /* ---------------- fleets ---------------- */
 
+// Yes/no lookup (the database no longer lets strangers list every fleet code).
 async function sbFindFleetByCode(code) {
-  const { data, error } = await requireSb().from('fleets').select('*').ilike('code', code).maybeSingle();
-  if (error) throw error;
-  return data;
+  const { data, error } = await requireSb().rpc('find_fleet', { p_code: String(code || '') });
+  if (!error) return data ? { code: data } : null;
+  if (!/find_fleet|schema cache|does not exist/i.test(error.message || '')) throw error;
+  // database update not installed yet: old behaviour
+  const r = await requireSb().from('fleets').select('code').ilike('code', code).maybeSingle();
+  if (r.error) throw r.error;
+  return r.data;
 }
 
 /* ---------------- units ---------------- */
@@ -196,7 +205,7 @@ async function sbDeleteStorageObjects(paths) {
 
 async function sbUploadBlob(path, blob) {
   const { error } = await requireSb().storage.from('inspection-media').upload(path, blob, {
-    contentType: blob.type,
+    contentType: String(blob.type || 'application/octet-stream').split(';')[0],
     upsert: false,
   });
   if (error) throw error;
@@ -217,7 +226,7 @@ async function sbUploadBlobWithProgress(path, blob, onProgress) {
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('apikey', window.SUPABASE_CONFIG.anonKey);
-    xhr.setRequestHeader('Content-Type', blob.type || 'application/octet-stream');
+    xhr.setRequestHeader('Content-Type', String(blob.type || 'application/octet-stream').split(';')[0]);
     xhr.setRequestHeader('x-upsert', 'false');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded);
@@ -298,7 +307,7 @@ async function sbUploadResumable(path, blob, onProgress, resumeId) {
     const meta = [
       'bucketName ' + tusB64('inspection-media'),
       'objectName ' + tusB64(path),
-      'contentType ' + tusB64(blob.type || 'application/octet-stream'),
+      'contentType ' + tusB64(String(blob.type || 'application/octet-stream').split(';')[0]),
       'cacheControl ' + tusB64('3600'),
     ].join(',');
     const c = await tusRequest('POST', endpoint, Object.assign(await baseHeaders(), {

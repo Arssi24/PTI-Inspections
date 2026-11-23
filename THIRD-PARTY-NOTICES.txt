@@ -1,0 +1,7 @@
+Third-party code bundled in this app (all kept in the js/ folder, none loaded from outside):
+- supabase-js (Supabase) - MIT License
+- jsQR 1.4.0 (Cosmo Wenman) - Apache License 2.0
+- qrcode.js (Kazuhiko Arase) - MIT License
+- MP4Box.js (Telecom Paris / GPAC) - BSD 3-Clause License
+- mp4-muxer (Vanilagy) - MIT License
+Licence texts are available from each project's public repository.

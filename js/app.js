@@ -32,6 +32,8 @@ const state = {
   scanLoopHandle: null,
   defects: [],
   finalDurationSec: 0,
+  dashSection: 'pti',
+  driversFilter: 'all',
   dashRange: 'today',
   dashFrom: '',
   dashTo: '',
@@ -67,7 +69,8 @@ function fmtTime(sec) {
 // instead of actually skipping — that's Apple's player UI, not something fixable from here,
 // so this small player is fully self-implemented instead, guaranteeing consistent behavior
 // everywhere it's used (recording review screen, History/Dashboard entry cards).
-function initCustomVideoPlayer(video) {
+function initCustomVideoPlayer(video, opts) {
+  const mgr = Boolean(opts && opts.manager);
   if (video.dataset.cvpReady) return;
   video.dataset.cvpReady = '1';
   video.controls = false;
@@ -75,17 +78,64 @@ function initCustomVideoPlayer(video) {
 
   const bar = document.createElement('div');
   bar.className = 'cvp-controls';
-  bar.innerHTML = `
+  const playBtnHtml = `
     <button class="cvp-btn cvp-play" type="button" title="Play/Pause">
       <svg class="icon cvp-icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
       <svg class="icon cvp-icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-    </button>
-    <button class="cvp-btn cvp-skip cvp-back" type="button" title="Back 15 seconds">−15s</button>
-    <div class="cvp-seekwrap"><input type="range" class="cvp-seek" min="0" max="1000" value="0" step="1" /><div class="cvp-ticks"></div></div>
-    <button class="cvp-btn cvp-skip cvp-fwd" type="button" title="Forward 15 seconds">+15s</button>
-    <span class="cvp-time">0:00 / 0:00</span>
-  `;
-  video.insertAdjacentElement('afterend', bar);
+    </button>`;
+  if (mgr) {
+    // Manager layout: play + time on the left, then -15s, seek bar, +15s, and a full-screen button.
+    bar.innerHTML = `
+      ${playBtnHtml}
+      <span class="cvp-time cvp-time-left">0:00 / 0:00</span>
+      <button class="cvp-btn cvp-skip cvp-back" type="button" title="Back 15 seconds">−15s</button>
+      <div class="cvp-seekwrap"><input type="range" class="cvp-seek" min="0" max="1000" value="0" step="1" /><div class="cvp-ticks"></div></div>
+      <button class="cvp-btn cvp-skip cvp-fwd" type="button" title="Forward 15 seconds">+15s</button>
+      <button class="cvp-btn cvp-fs" type="button" title="Full screen">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+    `;
+  } else {
+    bar.innerHTML = `
+      ${playBtnHtml}
+      <button class="cvp-btn cvp-skip cvp-back" type="button" title="Back 15 seconds">−15s</button>
+      <div class="cvp-seekwrap"><input type="range" class="cvp-seek" min="0" max="1000" value="0" step="1" /><div class="cvp-ticks"></div></div>
+      <button class="cvp-btn cvp-skip cvp-fwd" type="button" title="Forward 15 seconds">+15s</button>
+      <span class="cvp-time">0:00 / 0:00</span>
+    `;
+  }
+  let shell = null;
+  let bigPlay = null;
+  if (mgr) {
+    // video + big centre play button live in a stage; stage + controls live in a shell (so full screen keeps the controls)
+    shell = document.createElement('div');
+    shell.className = 'cvp-shell';
+    const stage = document.createElement('div');
+    stage.className = 'cvp-stage';
+    video.parentNode.insertBefore(shell, video);
+    stage.appendChild(video);
+    bigPlay = document.createElement('button');
+    bigPlay.type = 'button';
+    bigPlay.className = 'cvp-bigplay';
+    bigPlay.title = 'Play';
+    bigPlay.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8 5 19 12 8 19 8 5"/></svg>';
+    stage.appendChild(bigPlay);
+    shell.appendChild(stage);
+    shell.appendChild(bar);
+    // click anywhere on the picture to play / pause
+    stage.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
+    const toggleFs = () => {
+      const inFs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (inFs) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+      const req = shell.requestFullscreen || shell.webkitRequestFullscreen;
+      if (req) req.call(shell);
+      else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); // iPhone
+    };
+    bar.querySelector('.cvp-fs').addEventListener('click', toggleFs);
+    stage.addEventListener('dblclick', toggleFs);
+  } else {
+    video.insertAdjacentElement('afterend', bar);
+  }
 
   const playBtn = bar.querySelector('.cvp-play');
   const iconPlay = bar.querySelector('.cvp-icon-play');
@@ -109,6 +159,7 @@ function initCustomVideoPlayer(video) {
   function updatePlayIcon() {
     iconPlay.style.display = video.paused ? 'block' : 'none';
     iconPause.style.display = video.paused ? 'none' : 'block';
+    if (bigPlay) bigPlay.style.display = video.paused ? 'flex' : 'none';
   }
 
   playBtn.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
@@ -410,6 +461,13 @@ async function init() {
     onRangeChange();
   });
   $('#filter-type').addEventListener('change', (e) => { state.dashType = e.target.value; renderDashboard(); });
+  $$('#dh-chips .chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      state.dashType = chip.dataset.dh;
+      $$('#dh-chips .chip').forEach((c) => c.classList.toggle('active', c === chip));
+      renderDashboard();
+    });
+  });
 
   setupCombobox({
     inputEl: $('#filter-driver-input'),
@@ -495,6 +553,10 @@ async function onSignup() {
 
   if (!name || !email || !password) {
     showAuthError(errEl, 'Fill in your name, email, and password.');
+    return;
+  }
+  if (!$('#signup-consent').checked) {
+    showAuthError(errEl, 'Please tick the box to agree to the Terms of Use and Privacy Policy.');
     return;
   }
   if (phone.replace(/\D/g, '').length < 10) {
@@ -1805,13 +1867,21 @@ async function renderDriversList() {
   }
   $('#drivers-count').textContent = String(drivers.length);
   statsEl.innerHTML = `
-    <div class="stat-card"><div class="stat-num">${drivers.length}</div><div class="stat-label">Active drivers</div></div>
+    <button type="button" class="stat-card drv-filter" data-drvfilter="all"><div class="stat-num">${drivers.length}</div><div class="stat-label">Active drivers</div></button>
     ${recent ? `
-    <div class="stat-card"><div class="stat-num"><span class="pti-dot pti-green"></span>${counts.green}</div><div class="stat-label">PTI done today</div></div>
-    <div class="stat-card"><div class="stat-num"><span class="pti-dot pti-yellow"></span>${counts.yellow}</div><div class="stat-label">Not yet</div></div>
-    <div class="stat-card"><div class="stat-num"><span class="pti-dot pti-red"></span>${counts.red}</div><div class="stat-label">Missing PTI</div></div>
+    <button type="button" class="stat-card drv-filter" data-drvfilter="green"><div class="stat-num"><span class="pti-dot pti-green"></span>${counts.green}</div><div class="stat-label">PTI done today</div></button>
+    <button type="button" class="stat-card drv-filter" data-drvfilter="yellow"><div class="stat-num"><span class="pti-dot pti-yellow"></span>${counts.yellow}</div><div class="stat-label">Not yet</div></button>
+    <button type="button" class="stat-card drv-filter" data-drvfilter="red"><div class="stat-num"><span class="pti-dot pti-red"></span>${counts.red}</div><div class="stat-label">Missing PTI</div></button>
     ` : ''}
   `;
+  // Tap a status card to show only those drivers; tap it again (or "Active drivers") to see everyone.
+  statsEl.querySelectorAll('.drv-filter').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.drvfilter;
+      state.driversFilter = (f === 'all' || state.driversFilter === f) ? 'all' : f;
+      applyDriversSearch();
+    });
+  });
   if (drivers.length === 0) {
     list.innerHTML = '<div class="empty-state">No drivers have joined with your fleet code yet.</div>';
     return;
@@ -1820,6 +1890,7 @@ async function renderDriversList() {
     const row = document.createElement('div');
     row.className = 'entry-card driver-row';
     row.dataset.search = [d.name, d.email, d.assigned_unit].filter(Boolean).join(' ').toLowerCase();
+    row.dataset.level = d._pti ? d._pti.level : '';
     renderDriverRowView(row, d);
     list.appendChild(row);
   });
@@ -1834,20 +1905,25 @@ function applyDriversSearch() {
   const q = input.value.trim().toLowerCase();
   const words = q ? q.split(/\s+/) : [];
   let shown = 0;
+  const lvl = state.driversFilter || 'all';
   list.querySelectorAll('.driver-row').forEach((row) => {
     const hay = row.dataset.search || '';
-    const match = words.every((w) => hay.includes(w));
+    const match = words.every((w) => hay.includes(w)) && (lvl === 'all' || row.dataset.level === lvl);
     row.style.display = match ? '' : 'none';
     if (match) shown += 1;
   });
+  document.querySelectorAll('#drivers-stats .drv-filter').forEach((b) => {
+    const f = b.dataset.drvfilter;
+    b.classList.toggle('active-filter', f !== 'all' && f === lvl);
+  });
   let none = list.querySelector('.drivers-no-match');
-  if (words.length && shown === 0) {
+  if ((words.length || lvl !== 'all') && shown === 0) {
     if (!none) {
       none = document.createElement('div');
       none.className = 'empty-state drivers-no-match';
       list.appendChild(none);
     }
-    none.textContent = 'No driver or truck matches "' + input.value.trim() + '".';
+    none.textContent = words.length ? 'No driver or truck matches "' + input.value.trim() + '".' : 'No drivers in this group.';
   } else if (none) {
     none.remove();
   }
@@ -2020,7 +2096,8 @@ function renderDriverRowEdit(row, d) {
 
 const DASH_PAGE_TITLES = {
   overview: ['Dashboard', 'Today at a glance, synced in real time'],
-  inspections: ['Inspections', 'All driver inspections, videos and flagged photos'],
+  inspections: ['Inspections', 'PTIs: videos and flagged photos from every driver'],
+  drophook: ['Drop & Hook', 'Trailer drops and hooks, kept apart from the PTIs'],
   units: ['Trucks & Trailers', 'Your fleet units and their QR codes'],
   drivers: ['Drivers', 'Everyone signed up with your fleet code'],
   adddriver: ['Add Driver', 'Create a driver account that is linked to your fleet'],
@@ -2032,9 +2109,22 @@ function setSideDrawer(open) {
   if (scr) scr.classList.toggle('side-open', Boolean(open));
 }
 
+// 'pti' = only PTIs. 'dh' = only Drops and Hooks (with an All / Drop / Hook filter).
+function setDashSection(sec) {
+  state.dashSection = sec;
+  state.dashType = '';
+  const chips = $('#dh-chips');
+  if (chips) {
+    chips.style.display = sec === 'dh' ? 'flex' : 'none';
+    chips.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.dh === ''));
+  }
+  const sel = $('#filter-type'); if (sel) sel.value = '';
+}
+
 function switchDashTab(panel) {
   $$('.dash-tab').forEach((t) => t.classList.toggle('active', t.dataset.panel === panel));
-  $$('.dash-panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${panel}`));
+  const panelId = panel === 'drophook' ? 'inspections' : panel; // PTIs and Drop & Hook share one list view
+  $$('.dash-panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${panelId}`));
   const titles = DASH_PAGE_TITLES[panel] || ['', ''];
   $('#dash-page-title').textContent = titles[0];
   $('#dash-page-sub').textContent = titles[1];
@@ -2042,7 +2132,10 @@ function switchDashTab(panel) {
   try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
   if (panel === 'overview') renderOverview();
   if (panel === 'units') renderUnitsList();
-  if (panel === 'inspections') renderDashboard();
+  if (panel === 'inspections' || panel === 'drophook') {
+    setDashSection(panel === 'drophook' ? 'dh' : 'pti');
+    renderDashboard();
+  }
   if (panel === 'drivers') renderDriversList();
   if (panel === 'adddriver') resetAddDriverForm();
   if (panel === 'settings') fillSettingsPanel();
@@ -2109,7 +2202,7 @@ async function renderOverview() {
     latestEl.innerHTML = '<div class="ov-empty">No inspections yet.</div>';
   } else {
     latestEl.innerHTML = all.slice(0, 7).map((r) => `
-      <div class="ov-row clickable" data-go="inspections">
+      <div class="ov-row clickable" data-go="${r.type === 'PTI' ? 'inspections' : 'drophook'}">
         <span class="entry-type ${escapeHtml(r.type)}">${escapeHtml(r.type)}</span>
         <div class="ov-row-main"><div class="ov-row-title">${escapeHtml(r.unit)} · ${escapeHtml(r.driver_name)}</div><div class="ov-row-sub">${escapeHtml(fmtWhen(new Date(r.created_at).getTime()))}${r.defects && r.defects.length ? ` · ${r.defects.length} flagged` : ''}</div></div>
       </div>`).join('');
@@ -2274,6 +2367,8 @@ async function renderDashboard() {
 
   let all = await sbGetInspections(state.fleetCode);
   if (state.role === 'manager') all = await purgeExpiredInspections(all);
+  // Two separate sections: PTIs on one, Drops and Hooks on the other.
+  all = all.filter((r) => (state.dashSection === 'dh' ? r.type !== 'PTI' : r.type === 'PTI'));
   const registeredUnits = (await sbGetUnits(state.fleetCode)).map((u) => u.unit);
 
   const existingDrivers = Array.from(new Set(all.map((r) => r.driver_name))).sort();
@@ -2320,6 +2415,7 @@ async function renderDashboard() {
     state.dashSearch = '';
     $('#dash-search').value = '';
     state.dashType = '';
+    $$('#dh-chips .chip').forEach((c) => c.classList.toggle('active', c.dataset.dh === ''));
     state.dashOnlyDefects = false;
     $$('#filter-time .chip').forEach((c) => c.classList.remove('active'));
     clearDateRangeInputs();
@@ -2520,7 +2616,7 @@ async function loadCardVideo(card) {
     const objectUrl = URL.createObjectURL(blob);
     state.activeVideoObjectUrls.push(objectUrl);
     video.src = objectUrl;
-    initCustomVideoPlayer(video);
+    initCustomVideoPlayer(video, { manager: state.role === 'manager' });
     applyMarks();
     video.style.display = 'block';
     if (loadingEl) loadingEl.style.display = 'none';

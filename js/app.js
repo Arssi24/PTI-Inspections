@@ -1856,15 +1856,108 @@ async function renderManagersList() {
   }
   managers.forEach((m) => {
     const row = document.createElement('div');
-    row.className = 'entry-card driver-row';
-    const you = m.id === state.userId;
-    row.innerHTML = `
-      <div class="driver-avatar">${escapeHtml((m.name || '?').trim().charAt(0).toUpperCase())}</div>
-      <div class="driver-row-info">
-        <div class="entry-unit">${escapeHtml(m.name)}${you ? '<span class="pti-unit">You</span>' : ''}</div>
-        <div class="entry-meta"><span>${escapeHtml(m.email)}</span>${m.phone ? `<span>${escapeHtml(m.phone)}</span>` : ''}</div>
-      </div>`;
+    row.className = 'entry-card driver-row manager-row';
+    renderManagerRowView(row, m);
     list.appendChild(row);
+  });
+}
+
+function renderManagerRowView(row, m) {
+  row.classList.remove('driver-row-editing');
+  row.onclick = null;
+  const you = m.id === state.userId;
+  row.innerHTML = `
+    <div class="driver-avatar">${escapeHtml((m.name || '?').trim().charAt(0).toUpperCase())}</div>
+    <div class="driver-row-info">
+      <div class="entry-unit">${escapeHtml(m.name)}${you ? '<span class="pti-unit">You</span>' : ''}</div>
+      <div class="entry-meta"><span>${escapeHtml(m.email)}</span>${m.phone ? `<span>${escapeHtml(m.phone)}</span>` : ''}</div>
+    </div>
+    ${you ? '' : `
+    <div class="driver-menu-wrap">
+      <button class="unit-icon-btn driver-menu-btn" title="More options" type="button">
+        <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>
+      <div class="driver-menu">
+        <button class="driver-menu-item" data-action="edit" type="button">Edit / new password</button>
+        <button class="driver-menu-item danger" data-action="remove" type="button">Remove</button>
+      </div>
+    </div>`}
+  `;
+  if (you) return;
+  row.querySelector('.driver-menu-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = row.querySelector('.driver-menu');
+    const willShow = !menu.classList.contains('show');
+    closeAllDriverMenus();
+    if (willShow) menu.classList.add('show');
+  });
+  row.querySelector('[data-action="edit"]').addEventListener('click', () => {
+    closeAllDriverMenus();
+    renderManagerRowEdit(row, m);
+  });
+  row.querySelector('[data-action="remove"]').addEventListener('click', async () => {
+    closeAllDriverMenus();
+    if (!confirm(`Remove ${m.name} as a fleet manager?\n\nThey lose access right away and their login is deleted. Your fleet, trucks and inspections are not affected.`)) return;
+    try {
+      await sbRemoveManager(m.id);
+    } catch (err) {
+      const msg = (err && err.message) || 'try again';
+      alert(/manager_remove_manager|schema cache|does not exist/i.test(msg) ? 'The database part of this feature is not installed yet.' : 'Could not remove: ' + msg);
+      return;
+    }
+    renderManagersList();
+  });
+}
+
+function renderManagerRowEdit(row, m) {
+  row.classList.add('driver-row-editing');
+  row.innerHTML = `
+    <div class="driver-avatar">${escapeHtml((m.name || '?').trim().charAt(0).toUpperCase())}</div>
+    <div class="driver-row-info driver-edit-form">
+      <label class="driver-edit-label">Manager name</label>
+      <input class="field field-inline mgr-edit-name" value="${escapeHtml(m.name)}" placeholder="Name" />
+      <label class="driver-edit-label">Login (what they type to sign in)</label>
+      <input class="field field-inline mgr-edit-email" type="text" name="mgr-login" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" value="${escapeHtml(m.email)}" placeholder="name@gmail.com" />
+      <label class="driver-edit-label">New password: what you type becomes the password (at least 8 characters; leave empty to keep the current one)</label>
+      <input class="field field-inline mgr-edit-pass" type="text" name="mgr-newpass" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type the new password" />
+      <div class="driver-edit-msg" style="display:none;"></div>
+      <div class="driver-edit-actions">
+        <button class="btn btn-secondary mgr-edit-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary mgr-edit-save" type="button">Save</button>
+      </div>
+    </div>
+  `;
+  const msgEl = row.querySelector('.driver-edit-msg');
+  const showMsg = (text, kind) => { msgEl.textContent = text; msgEl.className = 'driver-edit-msg ' + (kind || ''); msgEl.style.display = text ? 'block' : 'none'; };
+  row.querySelector('.mgr-edit-cancel').addEventListener('click', () => renderManagerRowView(row, m));
+  const saveBtn = row.querySelector('.mgr-edit-save');
+  saveBtn.addEventListener('click', async () => {
+    const name = row.querySelector('.mgr-edit-name').value.trim();
+    let email = row.querySelector('.mgr-edit-email').value.trim().toLowerCase();
+    const pass = row.querySelector('.mgr-edit-pass').value;
+    if (!name) { showMsg('Name cannot be empty.', 'error'); return; }
+    if (!email) email = String(m.email || '').toLowerCase();
+    if (!email.includes('@')) email += '@gmail.com';
+    if (pass && pass.length < 8) { showMsg('The password needs at least 8 characters.', 'error'); return; }
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    showMsg('', '');
+    try {
+      await sbManagerUpdateManager(m.id, { name, email, password: pass });
+    } catch (err) {
+      const msg = (err && err.message) || 'try again';
+      showMsg(/manager_update_manager|schema cache|does not exist/i.test(msg) ? 'The database part of this feature is not installed yet.' : 'Could not save: ' + msg, 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+      return;
+    }
+    if (!pass) { renderManagersList(); return; }
+    saveBtn.textContent = 'Checking…';
+    const v = await verifyDriverLogin(email, pass);
+    row.querySelector('.driver-edit-form').innerHTML =
+      `<div class="driver-edit-msg ${v.ok ? 'ok' : 'error'}" style="display:block;">${v.ok ? '✔ Saved and checked: ' : 'Saved, but the check failed ('+escapeHtml(v.message || '')+'). '}${escapeHtml(name)} signs in with <strong>${escapeHtml(email)}</strong> and the password you typed. They were signed out everywhere.</div>` +
+      '<div class="driver-edit-actions"><button class="btn btn-primary mgr-edit-done" type="button">Done</button></div>';
+    row.querySelector('.mgr-edit-done').addEventListener('click', () => renderManagersList());
   });
 }
 

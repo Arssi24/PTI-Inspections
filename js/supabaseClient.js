@@ -130,6 +130,18 @@ async function sbManagerUpdateDriver(userId, { name, email, password, unit }) {
   if (error) throw error;
 }
 
+async function sbManagerUpdateManager(userId, { name, email, password }) {
+  const { error } = await requireSb().rpc('manager_update_manager', {
+    p_manager_id: userId, p_name: name, p_email: email || '', p_password: password || '',
+  });
+  if (error) throw error;
+}
+
+async function sbRemoveManager(userId) {
+  const { error } = await requireSb().rpc('manager_remove_manager', { p_manager_id: userId });
+  if (error) throw error;
+}
+
 async function sbUpdateDriver(userId, fields) {
   return requireSb().from('profiles').update(fields).eq('id', userId);
 }

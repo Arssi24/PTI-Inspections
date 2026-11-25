@@ -165,14 +165,44 @@ async function sbDeleteUnit(id) {
 
 /* ---------------- inspections ---------------- */
 
-async function sbGetInspections(fleetCode) {
+// Supabase returns at most 1000 rows per request, so this reads page after page (newest first).
+// opts: { since: ISO date (only newer), driverId: only that driver's, max: safety cap }
+async function sbGetInspections(fleetCode, opts) {
+  const o = opts || {};
+  const PAGE = 1000;
+  const cap = o.max || 20000;
+  let out = [];
+  for (let from = 0; from < cap; from += PAGE) {
+    let q = requireSb().from('inspections').select('*').eq('fleet_code', fleetCode);
+    q = o.type ? q.eq('type', o.type) : q.neq('type', 'BASELINE'); // assigned truck videos only when asked for
+    if (o.since) q = q.gte('created_at', o.since);
+    if (o.driverId) q = q.eq('driver_id', o.driverId);
+    const { data, error } = await q.order('created_at', { ascending: false }).range(from, from + PAGE - 1);
+    if (error) throw error;
+    out = out.concat(data || []);
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
+async function sbCountInspections(fleetCode) {
+  const { count, error } = await requireSb().from('inspections').select('id', { count: 'exact', head: true }).eq('fleet_code', fleetCode).neq('type', 'BASELINE');
+  if (error) throw error;
+  return count || 0;
+}
+
+// Oldest inspections past the retention date (used by the automatic clean-up).
+async function sbGetExpiredInspections(fleetCode, cutoffIso, limit) {
   const { data, error } = await requireSb()
     .from('inspections')
-    .select('*')
+    .select('id,video_path,defects,created_at')
     .eq('fleet_code', fleetCode)
-    .order('created_at', { ascending: false });
+    .neq('type', 'BASELINE') // assigned truck videos are never auto-deleted
+    .lt('created_at', cutoffIso)
+    .order('created_at', { ascending: true })
+    .limit(limit || 40);
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 async function sbGetRecentInspections(fleetCode, sinceIso) {
@@ -180,6 +210,7 @@ async function sbGetRecentInspections(fleetCode, sinceIso) {
     .from('inspections')
     .select('driver_id,driver_name,type,unit,created_at')
     .eq('fleet_code', fleetCode)
+    .neq('type', 'BASELINE')
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -215,12 +246,12 @@ async function sbUploadBlob(path, blob) {
 // The vendored supabase-js storage client has no upload-progress callback, so real
 // byte-level progress (for the uploading screen) needs a direct XHR call to the same
 // REST endpoint the SDK uses under the hood.
-async function sbUploadBlobWithProgress(path, blob, onProgress) {
+async function sbUploadBlobWithProgress(path, blob, onProgress, bucket) {
   const { data: sessionData } = await requireSb().auth.getSession();
   const token = sessionData.session ? sessionData.session.access_token : null;
   if (!token) throw new Error('Your session expired — log back in and try again.');
 
-  const url = `${window.SUPABASE_CONFIG.url}/storage/v1/object/inspection-media/${path}`;
+  const url = `${window.SUPABASE_CONFIG.url}/storage/v1/object/${bucket || 'inspection-media'}/${path}`;
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
@@ -286,7 +317,7 @@ function tusRequest(method, url, headers, body, onUploadProgress) {
 
 function tusSleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-async function sbUploadResumable(path, blob, onProgress, resumeId) {
+async function sbUploadResumable(path, blob, onProgress, resumeId, bucket) {
   const total = blob.size;
   const keyName = TUS_KEY_PREFIX + (resumeId || path);
   const endpoint = tusEndpoint();
@@ -305,13 +336,13 @@ async function sbUploadResumable(path, blob, onProgress, resumeId) {
   }
   if (!uploadUrl) {
     const meta = [
-      'bucketName ' + tusB64('inspection-media'),
+      'bucketName ' + tusB64(bucket || 'inspection-media'),
       'objectName ' + tusB64(path),
       'contentType ' + tusB64(String(blob.type || 'application/octet-stream').split(';')[0]),
       'cacheControl ' + tusB64('3600'),
     ].join(',');
     const c = await tusRequest('POST', endpoint, Object.assign(await baseHeaders(), {
-      'Upload-Length': String(total), 'Upload-Metadata': meta, 'x-upsert': 'true',
+      'Upload-Length': String(total), 'Upload-Metadata': meta, 'x-upsert': bucket ? 'false' : 'true',
     }));
     if (c.status !== 201 || !c.getHeader('Location')) throw new Error(`resumable-start-failed (${c.status}) ${String(c.text || '').slice(0, 160)}`);
     uploadUrl = new URL(c.getHeader('Location'), endpoint).toString();
@@ -359,13 +390,13 @@ async function sbUploadResumable(path, blob, onProgress, resumeId) {
 }
 
 // Resumable first; if that route is not available at all, use the old single-request upload.
-async function sbUploadFast(path, blob, onProgress, resumeId) {
+async function sbUploadFast(path, blob, onProgress, resumeId, bucket) {
   try {
-    return await sbUploadResumable(path, blob, onProgress, resumeId);
+    return await sbUploadResumable(path, blob, onProgress, resumeId, bucket);
   } catch (err) {
     if (err && /resumable-start-failed/.test(err.message || '')) {
       console.warn('Resumable upload not available, using plain upload:', err.message);
-      return sbUploadBlobWithProgress(path, blob, onProgress);
+      return sbUploadBlobWithProgress(path, blob, onProgress, bucket);
     }
     throw err;
   }
@@ -377,12 +408,61 @@ async function sbUploadDataUrl(path, dataUrl) {
   return sbUploadBlob(path, blob);
 }
 
-async function sbSignedUrl(path, expiresSec = 3600) {
+async function sbSignedUrl(path, expiresSec = 3600, bucket) {
   if (!path) return null;
-  const { data, error } = await requireSb().storage.from('inspection-media').createSignedUrl(path, expiresSec);
+  const { data, error } = await requireSb().storage.from(bucket || 'inspection-media').createSignedUrl(path, expiresSec);
   if (error) {
     console.warn('Signed URL failed for', path, error);
     return null;
   }
   return data.signedUrl;
+}
+
+
+/* ---------------- assigned truck videos (type 'BASELINE' inspections; permanent) ---------------- */
+
+// All of the fleet's assigned truck videos, newest first (paged).
+async function sbGetAssignedVideos(fleetCode) {
+  return sbGetInspections(fleetCode, { type: 'BASELINE' });
+}
+
+// The one permanent video for a unit, or null.
+async function sbFindAssignedVideo(fleetCode, unit) {
+  const { data, error } = await requireSb().from('inspections').select('*')
+    .eq('fleet_code', fleetCode).eq('type', 'BASELINE').ilike('unit', String(unit).replace(/[%_]/g, (m) => '\\' + m)).limit(1);
+  if (error) throw error;
+  return data && data.length ? data[0] : null;
+}
+
+// Inspections done per driver, by kind: { [driverId]: { PTI, DROP, HOOK, total } }
+async function sbGetDriverCounts(fleetCode) {
+  const out = {};
+  const add = (id, type, n) => {
+    const c = out[id] || (out[id] = { PTI: 0, DROP: 0, HOOK: 0, total: 0 });
+    if (type in c) c[type] += n;
+    c.total += n;
+  };
+  const r = await requireSb().rpc('fleet_driver_counts');
+  if (!r.error) { (r.data || []).forEach((x) => add(x.driver_id, x.type, Number(x.n))); return out; }
+  if (!/fleet_driver_counts|schema cache|does not exist/i.test(r.error.message || '')) throw r.error;
+  // database update not installed yet: count by reading the (small) columns
+  for (let from = 0; from < 50000; from += 1000) {
+    const { data, error } = await requireSb().from('inspections').select('driver_id,type').eq('fleet_code', fleetCode)
+      .neq('type', 'BASELINE').range(from, from + 999);
+    if (error) throw error;
+    (data || []).forEach((x) => add(x.driver_id, x.type, 1));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+/* ---------------- manager password ---------------- */
+
+// Confirms the current password, then sets the new one. The manager stays signed in.
+async function sbChangeOwnPassword(email, currentPassword, newPassword) {
+  const sb = requireSb();
+  const check = await sb.auth.signInWithPassword({ email, password: currentPassword });
+  if (check.error) return { error: { message: 'Your current password is not right.' } };
+  const r = await sb.auth.updateUser({ password: newPassword });
+  return r;
 }

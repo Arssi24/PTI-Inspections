@@ -4,8 +4,8 @@
 
 // The minimum length enforcement itself stays fully active — this is just the config for it,
 // not shown on-screen to drivers anymore (per the uncle's request), but still blocks Save &
-// Upload if a recording comes in short. PTI is 3:00 (was 3:30) so files stay smaller and upload faster.
-const MIN_SECONDS = { PTI: 3 * 60, HOOK: 60, DROP: 60 };
+// Upload if a recording comes in short. Every type (PTI, Hook, Drop) needs at least 1 minute.
+const MIN_SECONDS = { PTI: 60, HOOK: 60, DROP: 60, BASELINE: 60 };
 
 const state = {
   role: 'driver',
@@ -57,6 +57,8 @@ function showScreen(id) {
   el.classList.add('active');
   window.scrollTo(0, 0);
 }
+
+function typeLabel(t) { return t === 'BASELINE' ? 'ASSIGNED TRUCK' : t; }
 
 function fmtTime(sec) {
   const m = Math.floor(sec / 60);
@@ -451,6 +453,7 @@ async function init() {
       $('#range-box').classList.add('active');
       $('#filter-range-clear').style.display = 'inline-block';
     }
+    if (typeof syncDateBtns === 'function') syncDateBtns();
     renderDashboard();
   };
   $('#filter-from').addEventListener('change', onRangeChange);
@@ -886,6 +889,7 @@ async function logout() {
 function startFlow(type) {
   state.currentType = type;
   state.scanTargetTitle = type === 'PTI' ? 'Scan unit for Pre-Trip Inspection'
+    : type === 'BASELINE' ? 'Scan the truck or trailer for its Assigned Truck Video'
     : type === 'HOOK' ? 'Scan trailer to Hook'
     : 'Scan trailer to Drop';
   $('#scan-title').textContent = state.scanTargetTitle;
@@ -901,7 +905,7 @@ async function loadAvailableUnits() {
     const units = await sbGetUnits(state.fleetCode);
     // HOOK and DROP are trailer-only operations — only PTI can be done against either kind,
     // since a pre-trip walkaround covers the truck and whatever trailer's attached.
-    const relevant = state.currentType === 'PTI' ? units : units.filter((u) => u.kind === 'trailer');
+    const relevant = (state.currentType === 'PTI' || state.currentType === 'BASELINE') ? units : units.filter((u) => u.kind === 'trailer');
     state.availableUnits = relevant.map((u) => u.unit);
   } catch (err) {
     console.warn('Could not load units list', err);
@@ -982,6 +986,27 @@ function onUnitScanned(rawCode) {
     return false;
   }
   errEl.style.display = 'none';
+  if (state.currentType === 'BASELINE') {
+    // Only the FIRST video of a truck counts (and is kept forever) — check before recording.
+    if (state.baselineChecking) return false;
+    state.baselineChecking = true;
+    sbFindAssignedVideo(state.fleetCode, match).then((existing) => {
+      if (existing) {
+        errEl.textContent = `${match} already has its permanent Assigned Truck Video (recorded ${new Date(existing.created_at).toLocaleDateString()}). Open "Assigned Truck Video" on the home screen to watch it.`;
+        errEl.style.display = 'block';
+        return;
+      }
+      stopScanLoop();
+      state.currentUnit = match;
+      $('#manual-unit').value = '';
+      enterRecordScreen();
+    }).catch((err) => {
+      console.warn('Could not check the assigned truck video', err);
+      errEl.textContent = 'Could not check this truck right now — check your connection and try again.';
+      errEl.style.display = 'block';
+    }).finally(() => { state.baselineChecking = false; });
+    return false;
+  }
   stopScanLoop();
   state.currentUnit = match;
   $('#manual-unit').value = '';
@@ -999,7 +1024,7 @@ function onUnitScanned(rawCode) {
 
 async function enterRecordScreen() {
   showScreen('screen-record');
-  $('#record-title').textContent = `${state.currentType} · ${state.currentUnit}`;
+  $('#record-title').textContent = `${typeLabel(state.currentType)} · ${state.currentUnit}`;
   $('#recorder-launching').style.display = 'none';
   $('#recorder-live').style.display = 'none';
   $('#recorder-review').style.display = 'none';
@@ -1496,7 +1521,13 @@ async function performUpload(p, onProgress) {
     lng: p.location ? p.location.lng : null,
     location_accuracy_m: p.location ? p.location.accuracyM : null,
   });
-  if (error) throw error;
+  if (error) {
+    if (p.type === 'BASELINE' && (error.code === '23505' || /duplicate|unique/i.test(error.message || ''))) {
+      try { await queueRemovePendingUpload(p.id); } catch (e) { /* ignore */ }
+      throw new Error(`${p.unit} already has its permanent Assigned Truck Video (someone recorded it first), so this one was not saved.`);
+    }
+    throw error;
+  }
 
   try {
     await queueRemovePendingUpload(p.id);
@@ -1694,6 +1725,7 @@ function downloadUnitQr(unit) {
 
 async function renderUnitsList() {
   const mine = await sbGetUnits(state.fleetCode);
+
   const list = $('#units-list');
   list.innerHTML = '';
   if (mine.length === 0) {
@@ -1856,8 +1888,11 @@ async function renderDriversList() {
   } catch (err) {
     recent = null;
   }
+  let perDriver = null;
+  try { perDriver = await sbGetDriverCounts(state.fleetCode); } catch (err) { perDriver = null; }
   let counts = { green: 0, yellow: 0, red: 0 };
   drivers.forEach((d) => {
+    d._counts = perDriver ? (perDriver[d.id] || { PTI: 0, DROP: 0, HOOK: 0, total: 0 }) : null;
     d._pti = recent ? computePtiStatus(d, recent) : null;
     if (d._pti) counts[d._pti.level] += 1;
   });
@@ -1959,6 +1994,8 @@ function closeAllDriverMenus() {
 
 function renderDriverRowView(row, d) {
   row.classList.remove('driver-row-editing');
+  row.onclick = (e) => { if (e.target.closest('.driver-menu-wrap')) return; openDriverWindow(d); };
+  row.title = 'Open all of ' + (d.name || 'this driver') + "'s inspections";
   row.innerHTML = `
     <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
     <div class="driver-row-info">
@@ -1967,6 +2004,7 @@ function renderDriverRowView(row, d) {
       <div class="entry-meta"><span>${escapeHtml(d.email)}</span>${d.phone ? `<span>${escapeHtml(d.phone)}</span>` : ''}</div>
       ${d.assigned_unit ? `<div class="driver-assigned">Assigned: ${escapeHtml(d.assigned_unit)}</div>` : ''}
     </div>
+    ${d._counts ? `<button type="button" class="driver-count" title="PTI ${d._counts.PTI} · Drop ${d._counts.DROP} · Hook ${d._counts.HOOK} — tap to open them all"><span class="driver-count-num">${d._counts.total}</span><span class="driver-count-label">${d._counts.total === 1 ? 'inspection' : 'inspections'}</span></button>` : ''}
     <div class="driver-menu-wrap">
       <button class="unit-icon-btn driver-menu-btn" title="More options" type="button">
         <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
@@ -2015,6 +2053,8 @@ async function verifyDriverLogin(email, password) {
 
 function renderDriverRowEdit(row, d) {
   row.classList.add('driver-row-editing');
+  row.onclick = null;
+  row.title = '';
   row.innerHTML = `
     <div class="driver-avatar">${escapeHtml((d.name || '?').trim().charAt(0).toUpperCase())}</div>
     <div class="driver-row-info driver-edit-form">
@@ -2101,6 +2141,7 @@ const DASH_PAGE_TITLES = {
   units: ['Trucks & Trailers', 'Your fleet units and their QR codes'],
   drivers: ['Drivers', 'Everyone signed up with your fleet code'],
   adddriver: ['Add Driver', 'Create a driver account that is linked to your fleet'],
+  assigned: ['Assigned Truck Video', 'The first video of every truck, recorded by drivers before use. Kept forever.'],
   settings: ['Settings', 'Fleet codes and your account'],
 };
 
@@ -2139,6 +2180,7 @@ function switchDashTab(panel) {
   }
   if (panel === 'drivers') renderDriversList();
   if (panel === 'adddriver') resetAddDriverForm();
+  if (panel === 'assigned' && typeof renderAssignedPanel === 'function') renderAssignedPanel();
   if (panel === 'settings') fillSettingsPanel();
 }
 
@@ -2154,7 +2196,10 @@ async function renderOverview() {
   let all = [];
   let drivers = [];
   try {
-    [all, drivers] = await Promise.all([sbGetInspections(state.fleetCode), sbGetFleetDrivers(state.fleetCode)]);
+    const weekIso = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString();
+    let total = 0;
+    [all, drivers, total] = await Promise.all([sbGetInspections(state.fleetCode, { since: weekIso }), sbGetFleetDrivers(state.fleetCode), sbCountInspections(state.fleetCode)]);
+    state.ovTotal = total;
     if (state.role === 'manager') all = await purgeExpiredInspections(all);
   } catch (err) {
     statsEl.innerHTML = '';
@@ -2182,7 +2227,7 @@ async function renderOverview() {
     <button class="stat-card" type="button" data-go="drivers"><div class="stat-num">${counts.green}<span class="stat-of"> / ${drivers.length}</span></div><div class="stat-label">Drivers done with PTI</div></button>
     <button class="stat-card red" type="button" data-go="drivers"><div class="stat-num">${counts.red}</div><div class="stat-label">Missing PTI</div></button>
     <button class="stat-card orange" type="button" data-go="inspections"><div class="stat-num">${flaggedToday}</div><div class="stat-label">Flagged today</div></button>
-    <button class="stat-card" type="button" data-go="inspections"><div class="stat-num">${all.length}</div><div class="stat-label">Total on record</div></button>
+    <button class="stat-card" type="button" data-go="inspections"><div class="stat-num">${state.ovTotal != null ? state.ovTotal : all.length}</div><div class="stat-label">Total on record</div></button>
   `;
   statsEl.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => switchDashTab(b.dataset.go)));
 
@@ -2287,6 +2332,9 @@ function fillSettingsPanel() {
   const fc = $('#fleet-code-value-2'); if (fc) fc.textContent = state.fleetCode || '—';
   const n = $('#set-name'); if (n) n.textContent = state.driverName || '—';
   const e = $('#set-email'); if (e) e.textContent = state.driverEmail || '—';
+  ['#pw-current', '#pw-new', '#pw-new2'].forEach((s) => { const el = $(s); if (el) el.value = ''; });
+  const pe = $('#pw-error'); if (pe) pe.style.display = 'none';
+  const po = $('#pw-ok'); if (po) po.style.display = 'none';
 }
 
 function clearDateRangeInputs() {
@@ -2296,6 +2344,26 @@ function clearDateRangeInputs() {
   const t = $('#filter-to'); if (t) t.value = '';
   const b = $('#range-box'); if (b) b.classList.remove('active');
   const c = $('#filter-range-clear'); if (c) c.style.display = 'none';
+  if (typeof syncDateBtns === 'function') syncDateBtns();
+}
+
+// Earliest date the Inspections list needs from the server for the current time filter.
+function dashSinceIso() {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const r = state.dashRange;
+  if (r === 'today') return new Date(todayStart - 86400000).toISOString(); // a day of slack for time zones
+  if (r === '7d') return new Date(todayStart - 7 * 86400000).toISOString();
+  if (r === '30d') return new Date(todayStart - 30 * 86400000).toISOString();
+  if (r === 'range') {
+    const a = state.dashFrom ? new Date(state.dashFrom + 'T00:00:00').getTime() : null;
+    const b = state.dashTo ? new Date(state.dashTo + 'T00:00:00').getTime() : null;
+    const lo = a != null && b != null ? Math.min(a, b) : (a != null ? a : b);
+    if (a != null && b == null) return new Date(a - 86400000).toISOString();
+    if (a == null && b != null) return null; // "up to" a date: everything older is needed
+    return new Date(lo - 86400000).toISOString();
+  }
+  return null;
 }
 
 function inRange(ts, range) {
@@ -2319,15 +2387,16 @@ function inRange(ts, range) {
 
 // Inspections (video + defect photos) older than this are deleted automatically the first
 // time a manager opens the dashboard each day. Same delete path as the manual Delete button.
-const RETENTION_DAYS = 14;
+// Assigned Truck Videos (type BASELINE) are skipped here and kept forever.
+const RETENTION_DAYS = 90; // 3 months
 const PURGE_BATCH_LIMIT = 40;
 
 async function purgeExpiredInspections(all) {
   try {
     const today = new Date().toDateString();
     if (localStorage.getItem('pti_last_purge') === today) return all;
-    const cutoff = Date.now() - RETENTION_DAYS * 24 * 3600 * 1000;
-    const expired = all.filter((r) => new Date(r.created_at).getTime() < cutoff).slice(0, PURGE_BATCH_LIMIT);
+    const cutoffIso = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000).toISOString();
+    const expired = await sbGetExpiredInspections(state.fleetCode, cutoffIso, PURGE_BATCH_LIMIT);
     if (expired.length === 0) {
       localStorage.setItem('pti_last_purge', today);
       return all;
@@ -2366,10 +2435,10 @@ async function renderDashboard() {
   const list = $('#dash-list');
   list.innerHTML = '<div class="empty-state">Loading…</div>';
 
-  let all = await sbGetInspections(state.fleetCode);
+  let all = await sbGetInspections(state.fleetCode, { since: dashSinceIso() });
   if (state.role === 'manager') all = await purgeExpiredInspections(all);
   // Two separate sections: PTIs on one, Drops and Hooks on the other.
-  all = all.filter((r) => (state.dashSection === 'dh' ? r.type !== 'PTI' : r.type === 'PTI'));
+  all = all.filter((r) => (state.dashSection === 'dh' ? (r.type === 'HOOK' || r.type === 'DROP') : r.type === 'PTI'));
   const registeredUnits = (await sbGetUnits(state.fleetCode)).map((u) => u.unit);
 
   const existingDrivers = Array.from(new Set(all.map((r) => r.driver_name))).sort();
@@ -2481,7 +2550,7 @@ async function renderEntryCard(r, showDriver) {
   card.innerHTML = `
     <div class="entry-top">
       <div style="display:flex; align-items:center; gap:10px;">
-        <span class="entry-type ${r.type}">${r.type}</span>
+        <span class="entry-type ${r.type}">${typeLabel(r.type)}</span>
         <span class="entry-unit">${unit}</span>
       </div>
       <div style="font-size:12.5px; color:var(--text-mute);">${fmtWhen(createdAtMs)}</div>
@@ -2495,13 +2564,13 @@ async function renderEntryCard(r, showDriver) {
       ${hasDefects ? `<span class="entry-defect-flag"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${r.defects.length} defect${r.defects.length > 1 ? 's' : ''} flagged</span>` : '<span>No defects flagged</span>'}
     </div>
     <div class="entry-details">
-      <div class="entry-detail-row">Unit ${unit} · ${r.type} · ${new Date(r.created_at).toLocaleString()}</div>
+      <div class="entry-detail-row">Unit ${unit} · ${typeLabel(r.type)} · ${new Date(r.created_at).toLocaleString()}</div>
       ${showDriver ? `<div class="entry-detail-row">Driver: ${driverName}${driverEmail ? ` · <a href="mailto:${driverEmail}">${driverEmail}</a>` : ''}${driverPhone ? ` · ${driverPhone}` : ''}</div>` : ''}
       <div class="entry-detail-row">Location: ${locationHtml}</div>
       ${videoHtml}
       ${hasDefects ? `<div class="mark-chips mark-chips-mgr"><span class="mark-chips-label">Driver flagged:</span>${r.defects.map((d) => `<span class="mark-chip"><button type="button" class="mark-chip-go" data-t="${d.t}">&#9873; ${fmtTime(d.t)}</button></span>`).join('')}</div>` : ''}
       ${photosHtml}
-      ${state.role === 'manager' ? `
+      ${state.role === 'manager' && r.type !== 'BASELINE' ? `
         <button class="entry-delete-btn" type="button">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           Delete this inspection
@@ -2532,6 +2601,7 @@ async function renderEntryCard(r, showDriver) {
         const paths = [r.video_path, ...(r.defects || []).map((d) => d.photo_path)].filter(Boolean);
         await sbDeleteStorageObjects(paths);
         await sbDeleteInspection(r.id);
+        if (card.closest('#app-modal')) card.remove();
         renderDashboard();
       } catch (err) {
         alert('Could not delete — try again: ' + (err.message || err));
@@ -2557,6 +2627,15 @@ async function renderEntryCard(r, showDriver) {
       if (v.readyState >= 1) go(); else v.addEventListener('loadedmetadata', go, { once: true });
     });
   });
+  const drvLink = card.querySelector('.entry-driver');
+  if (drvLink && state.role === 'manager' && r.driver_id) {
+    drvLink.classList.add('entry-driver-link');
+    drvLink.title = "See all of this driver's inspections";
+    drvLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDriverWindow({ id: r.driver_id, name: r.driver_name, email: r.driver_email, phone: r.driver_phone });
+    });
+  }
   card.querySelector('.mark-chips-mgr')?.addEventListener('click', (e) => e.stopPropagation());
   card.querySelector('.entry-video-wrap')?.addEventListener('click', (e) => e.stopPropagation());
   card.querySelector('.entry-video-actions')?.addEventListener('click', (e) => e.stopPropagation());

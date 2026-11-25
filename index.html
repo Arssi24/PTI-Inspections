@@ -253,6 +253,7 @@
       </div>
 
       <button class="btn btn-secondary btn-block" id="btn-history">View My History</button>
+      <button class="btn btn-secondary btn-block" id="btn-baseline" style="margin-top:10px;">Assigned Truck Video</button>
     </div>
   </section>
 
@@ -430,6 +431,24 @@
     </div>
   </section>
 
+  <!-- Assigned Truck Video: the first video of each truck/trailer, recorded by a driver, kept forever -->
+  <section class="screen" id="screen-baseline" data-screen>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <button class="icon-btn" data-back="screen-home">←</button>
+        <div class="hello">Assigned Truck Video</div>
+        <div style="width:32px"></div>
+      </header>
+      <p class="baseline-intro">How a truck looked before it was used. The first video of each truck is kept forever — nobody can delete or replace it.</p>
+      <button class="btn btn-primary btn-block" id="btn-record-assigned" type="button">Record Assigned Truck Video</button>
+      <div class="baseline-section-title">Your truck</div>
+      <div id="baseline-mine" class="entry-list"></div>
+      <div class="baseline-section-title">Find another truck or trailer</div>
+      <input class="field" id="baseline-search" placeholder="Type a truck or trailer number" autocomplete="off" />
+      <div id="baseline-list" class="entry-list"></div>
+    </div>
+  </section>
+
   <!-- ============ FLEET MANAGER DASHBOARD ============ -->
   <section class="screen" id="screen-dashboard" data-screen>
     <div class="dash-layout">
@@ -445,9 +464,10 @@
           <button class="dash-tab side-item" data-panel="units" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Trucks &amp; Trailers</span></button>
           <button class="dash-tab side-item" data-panel="drivers" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="8" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 4.13a4 4 0 0 1 0 7.75"/></svg><span>Drivers</span></button>
           <button class="dash-tab side-item" data-panel="adddriver" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="8" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg><span>Add Driver</span></button>
-          <button class="dash-tab side-item" data-panel="settings" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></button>
+          <button class="dash-tab side-item" data-panel="assigned" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg><span>Assigned Truck Video</span></button>
         </nav>
         <div class="side-foot">
+          <button class="dash-tab side-item" data-panel="settings" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></button>
           <div class="side-user">
             <div class="side-user-avatar" id="side-user-avatar">M</div>
             <div class="side-user-info">
@@ -504,9 +524,11 @@
           </div>
           <div class="range-box" id="range-box" title="Pick a start and an end date to see everything in between">
             <span class="range-label">From</span>
-            <input type="date" id="filter-from" class="range-input" />
+            <input type="hidden" id="filter-from" />
+            <button type="button" class="range-input date-btn" id="filter-from-btn">Pick date</button>
             <span class="range-label">to</span>
-            <input type="date" id="filter-to" class="range-input" />
+            <input type="hidden" id="filter-to" />
+            <button type="button" class="range-input date-btn" id="filter-to-btn">Pick date</button>
             <button type="button" class="range-clear" id="filter-range-clear" style="display:none;">Clear</button>
           </div>
           <div class="combo" id="combo-unit">
@@ -619,6 +641,16 @@
       </div>
 
       <!-- Settings panel -->
+      <div class="dash-panel" id="panel-assigned">
+        <div class="card assigned-info">
+          <strong>Assigned Truck Video</strong> — the first video of each truck or trailer, recorded by a driver (scan the QR, record, upload) before the unit is used.
+          The first one for a unit is kept <strong>forever</strong>: it is never auto-deleted and nobody can delete or replace it.
+        </div>
+        <input class="field" id="assigned-search" placeholder="Search a truck, trailer or driver" autocomplete="off" />
+        <div class="entry-list" id="assigned-list"></div>
+        <button type="button" class="btn btn-secondary drvwin-more" id="assigned-more" style="display:none;">Show more</button>
+      </div>
+
       <div class="dash-panel" id="panel-settings">
         <div class="card settings-card">
           <h3 class="panel-card-title">Fleet codes</h3>
@@ -642,6 +674,19 @@
           </div>
         </div>
         <div class="card settings-card">
+          <h3 class="panel-card-title">Change password</h3>
+          <p class="field-hint" style="margin-top:0;">Change your own password without logging out.</p>
+          <label class="field-label" for="pw-current">Current password</label>
+          <input class="field" type="password" id="pw-current" autocomplete="current-password" />
+          <label class="field-label" for="pw-new">New password</label>
+          <input class="field" type="password" id="pw-new" autocomplete="new-password" />
+          <label class="field-label" for="pw-new2">Repeat new password</label>
+          <input class="field" type="password" id="pw-new2" autocomplete="new-password" />
+          <div class="field-error" id="pw-error" style="display:none;"></div>
+          <div class="pw-ok" id="pw-ok" style="display:none;"></div>
+          <button class="btn btn-primary" id="btn-change-password" type="button">Update password</button>
+        </div>
+        <div class="card settings-card">
           <h3 class="panel-card-title">Legal</h3>
           <div class="set-row"><div class="set-row-text"><div class="set-label">Privacy Policy</div><div class="set-help">What the app collects and how long it is kept.</div></div><div class="set-row-value"><a href="privacy.html" target="_blank" rel="noopener">Open</a></div></div>
           <div class="set-row"><div class="set-row-text"><div class="set-label">Terms of Use</div></div><div class="set-row-value"><a href="terms.html" target="_blank" rel="noopener">Open</a></div></div>
@@ -650,10 +695,22 @@
           <h3 class="panel-card-title">Your account</h3>
           <div class="set-row"><div class="set-row-text"><div class="set-label">Name</div></div><div class="set-row-value" id="set-name">—</div></div>
           <div class="set-row"><div class="set-row-text"><div class="set-label">Login</div></div><div class="set-row-value" id="set-email">—</div></div>
-          <div class="set-row"><div class="set-row-text"><div class="set-label">Videos are kept</div><div class="set-help">Older inspections are removed automatically to save space.</div></div><div class="set-row-value">14 days</div></div>
+          <div class="set-row"><div class="set-row-text"><div class="set-label">Videos are kept</div><div class="set-help">Older inspections are removed automatically to save space. Assigned Truck Videos are never removed.</div></div><div class="set-row-value">3 months</div></div>
         </div>
       </div>
       </main>
+      <div class="modal-overlay" id="app-modal" style="display:none;">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+          <div class="modal-head">
+            <div class="modal-head-text">
+              <div class="modal-title" id="modal-title"></div>
+              <div class="modal-sub" id="modal-sub"></div>
+            </div>
+            <button type="button" class="modal-x" id="modal-close" aria-label="Close">&times;</button>
+          </div>
+          <div class="modal-body" id="modal-body"></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -680,5 +737,6 @@
 <script src="js/wcRecorder.js"></script>
   <script src="js/liveRecorder.js"></script>
 <script src="js/app.js"></script>
+<script src="js/features.js"></script>
 </body>
 </html>

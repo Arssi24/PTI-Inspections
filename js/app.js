@@ -2128,6 +2128,7 @@ function switchDashTab(panel) {
   const titles = DASH_PAGE_TITLES[panel] || ['', ''];
   $('#dash-page-title').textContent = titles[0];
   $('#dash-page-sub').textContent = titles[1];
+  $$('#screen-dashboard video').forEach((v) => { try { v.pause(); } catch (e) { /* ignore */ } });
   setSideDrawer(false);
   try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
   if (panel === 'overview') renderOverview();
@@ -2512,6 +2513,7 @@ async function renderEntryCard(r, showDriver) {
     const opening = !card.classList.contains('open');
     card.classList.toggle('open');
     if (opening) loadCardVideo(card);
+    else card.querySelectorAll('video').forEach((v) => { try { v.pause(); } catch (e) { /* ignore */ } }); // closing the card stops the video
   });
   card.querySelectorAll('.entry-photos img').forEach((img) => {
     img.addEventListener('click', (e) => {

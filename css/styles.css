@@ -966,3 +966,53 @@ body.modal-open { overflow: hidden; }
 
 /* manager sidebar: colour emojis instead of line icons */
 .side-emoji { width: 24px; text-align: center; font-size: 19px; line-height: 1; flex-shrink: 0; font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; filter: grayscale(0); }
+
+
+/* =====================================================================
+   Manager dashboard v62: deep navy filled sidebar + top bar, green actions (HaulDesk-style)
+   ===================================================================== */
+#screen-dashboard {
+  --navy: #0f1b3d; --navy-dark: #0a1330; --navy-darker: #070d22;
+  --primary: #0e9150; --primary-dark: #0a7340; --primary-light: #e1f5ea; --primary-gradient: #0e9150;
+  --purple-drop: #3b6fd4;
+  --bg: #f4f6fa;
+  --side-bg: #0f1b3d;
+}
+#screen-dashboard .btn-primary { box-shadow: 0 4px 14px rgba(14,145,80,0.28); }
+#screen-dashboard .btn-secondary, #screen-dashboard .filter-group { background: #e6ebf5; }
+.range-box.active { box-shadow: 0 0 0 2px rgba(14,145,80,0.18); }
+.drv-filter.active-filter { box-shadow: 0 0 0 2px rgba(14,145,80,0.2); }
+
+/* sidebar: filled navy */
+.dash-sidebar { background: var(--side-bg, #0f1b3d); border-right: none; }
+.side-brand { border-bottom: 1px solid rgba(255,255,255,0.08); }
+.side-brand-sub { color: #7fe0ae; }
+.side-item { color: #c9d3ea; }
+.side-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.side-item.active, .dash-tab.side-item.active { background: rgba(255,255,255,0.12); color: #fff; }
+.side-item.active::before { background: #19c37d; }
+.side-foot { border-top: 1px solid rgba(255,255,255,0.08); }
+.side-user-avatar { background: #19a463; }
+.side-user-name { color: #fff; }
+.side-user-role { color: #8fa0c4; }
+.side-logout, .side-logout .icon { color: #ff9a90; }
+.side-logout:hover { background: rgba(255,255,255,0.07); color: #ffb4ac; }
+
+/* top bar: filled navy band across the whole main area */
+.dash-main { padding-top: 0; }
+.dash-topbar {
+  position: sticky; top: 0; z-index: 30;
+  margin: 0 -32px 24px; padding: max(16px, calc(env(safe-area-inset-top) + 8px)) 32px 16px;
+  background: #0f1b3d; color: #fff; box-shadow: 0 2px 10px rgba(15,27,61,0.18);
+}
+.dash-topbar .dash-page-title { color: #fff; }
+.dash-topbar .dash-sub { color: #9fb0d3; }
+.dash-topbar .fleet-code-chip { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.22); color: #c9d3ea; }
+.dash-topbar .fleet-code-chip strong { color: #7fe0ae; }
+.dash-topbar .dash-menu-btn { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.2); color: #fff; }
+@media (max-width: 900px) {
+  .dash-topbar { margin: 0 -14px 18px; padding: max(14px, calc(env(safe-area-inset-top) + 8px)) 14px 14px; }
+}
+/* emojis sit on a soft light tile so the dark ones stay visible on navy */
+.side-emoji { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,0.92); font-size: 17px; }
+.side-item.active .side-emoji { background: #fff; }
